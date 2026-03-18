@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alchemist's Automatons</title>
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
       </div>
     </header>
 
-    <!-- MAIN LAYOUT: Workshop | Golems+Alchemy | World+Log -->
+    <!-- MAIN LAYOUT: Workshop | World+Log | Golems+Alchemy -->
     <div id="main-layout">
 
       <!-- LEFT: WORKSHOP -->
@@ -46,7 +46,17 @@
         </div>
       </div>
 
-      <!-- CENTER: GOLEMS + ALCHEMY -->
+      <!-- CENTER: WORLD MAP + LOG -->
+      <div id="panel-world" class="panel">
+        <h2 class="panel-title">[ World ]</h2>
+        <div id="ascii-map"></div>
+        <div id="event-log-container">
+          <h3>Event Log</h3>
+          <div id="event-log"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: GOLEMS + ALCHEMY -->
       <div id="panel-golems" class="panel">
         <h2 class="panel-title">[ Golems ]</h2>
         <div id="golems-list"></div>
@@ -54,16 +64,6 @@
         <div class="section" id="alchemy-section">
           <h3>Alchemy Lab</h3>
           <div id="alchemy-display"></div>
-        </div>
-      </div>
-
-      <!-- RIGHT: WORLD MAP + LOG -->
-      <div id="panel-world" class="panel">
-        <h2 class="panel-title">[ World ]</h2>
-        <div id="ascii-map"></div>
-        <div id="event-log-container">
-          <h3>Event Log</h3>
-          <div id="event-log"></div>
         </div>
       </div>
 
@@ -76,6 +76,6 @@
     </footer>
   </div>
 
-  <script src="game.js?v=3"></script>
+  <script src="game.js?v=4"></script>
 </body>
 </html>

@@ -59,7 +59,7 @@ header {
 /* ── LAYOUT ──────────────────────────────────────────── */
 #main-layout {
   display: grid;
-  grid-template-columns: 260px 1fr 260px;
+  grid-template-columns: 240px 1fr 300px;
   gap: 0;
   height: calc(100vh - 90px);
 }
@@ -157,15 +157,16 @@ header {
 
 /* ── ASCII MAP ───────────────────────────────────────── */
 #ascii-map {
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.5;
   background: var(--bg);
   border: 1px solid var(--border);
-  padding: 8px;
-  margin-bottom: 10px;
-  min-height: 200px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  min-height: 280px;
   white-space: pre;
   overflow: hidden;
+  text-align: center;
 }
 
 /* ── EVENT LOG ───────────────────────────────────────── */
@@ -178,11 +179,11 @@ header {
 #event-log {
   background: var(--bg);
   border: 1px solid var(--border);
-  padding: 6px;
-  height: 220px;
+  padding: 8px;
+  height: 260px;
   overflow-y: auto;
-  font-size: 11px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .log-entry { border-bottom: 1px dotted #1a2a1a; padding: 1px 0; }
