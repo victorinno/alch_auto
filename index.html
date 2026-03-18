@@ -23,10 +23,10 @@
       </div>
     </header>
 
-    <!-- MAIN LAYOUT: Workshop | World+Log | Golems+Alchemy -->
+    <!-- MAIN LAYOUT: Workshop (left) | Right column (World top + Golems+Alchemy bottom) -->
     <div id="main-layout">
 
-      <!-- LEFT: WORKSHOP -->
+      <!-- LEFT: WORKSHOP (full height) -->
       <div id="panel-workshop" class="panel">
         <h2 class="panel-title">[ Workshop ]</h2>
 
@@ -46,26 +46,31 @@
         </div>
       </div>
 
-      <!-- CENTER: WORLD MAP + LOG -->
-      <div id="panel-world" class="panel">
-        <h2 class="panel-title">[ World ]</h2>
-        <div id="ascii-map"></div>
-        <div id="event-log-container">
-          <h3>Event Log</h3>
-          <div id="event-log"></div>
-        </div>
-      </div>
+      <!-- RIGHT COLUMN: stacked vertically -->
+      <div id="right-column">
 
-      <!-- RIGHT: GOLEMS + ALCHEMY -->
-      <div id="panel-golems" class="panel">
-        <h2 class="panel-title">[ Golems ]</h2>
-        <div id="golems-list"></div>
-
-        <div class="section" id="alchemy-section">
-          <h3>Alchemy Lab</h3>
-          <div id="alchemy-display"></div>
+        <!-- TOP: WORLD MAP + LOG -->
+        <div id="panel-world" class="panel">
+          <h2 class="panel-title">[ World ]</h2>
+          <div id="ascii-map"></div>
+          <div id="event-log-container">
+            <h3>Event Log</h3>
+            <div id="event-log"></div>
+          </div>
         </div>
-      </div>
+
+        <!-- BOTTOM: GOLEMS + ALCHEMY -->
+        <div id="panel-golems" class="panel">
+          <h2 class="panel-title">[ Golems ]</h2>
+          <div id="golems-list"></div>
+
+          <div class="section" id="alchemy-section">
+            <h3>Alchemy Lab</h3>
+            <div id="alchemy-display"></div>
+          </div>
+        </div>
+
+      </div><!-- /right-column -->
 
     </div>
 
