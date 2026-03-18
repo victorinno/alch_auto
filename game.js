@@ -199,6 +199,7 @@ function craftGolem(typeId) {
   renderRecipes();
   renderResources();
   renderFooter();
+  saveGame();
 }
 
 function assignGolemToZone(golemId, zoneId) {
@@ -248,6 +249,7 @@ function upgradeGolem(golemId, upgradeId) {
   renderGolemRoster();
   renderResources();
   renderZones();
+  saveGame(); // save immediately so refresh doesn't lose upgrade
 }
 
 function destroyGolem(golemId) {
@@ -266,6 +268,7 @@ function destroyGolem(golemId) {
   renderRecipes();
   renderResources();
   renderFooter();
+  saveGame();
 }
 
 function tickGolems(now) {
@@ -365,6 +368,7 @@ function upgradeWorkshop() {
   ALCHEMY_RECIPES.forEach(r => { if (r.requiresLevel !== undefined && r.requiresLevel <= G.workshopLevel) r.unlocked = true; });
   log(`🏗️  Workshop upgraded to ${next.name}!`, "great");
   renderAll();
+  saveGame();
 }
 
 function buyUpgrade(upgradeId) {
@@ -379,6 +383,7 @@ function buyUpgrade(upgradeId) {
   renderUpgrades();
   renderResources();
   renderZones();
+  saveGame();
 }
 
 // ─────────────────────────────────────────────────────
@@ -420,8 +425,8 @@ function renderZones() {
       } else {
         // Empty slot — show assign button with dropdown
         const available = idleGolems().filter(g => {
-          const d = GOLEM_TYPES[g.typeId];
-          return d.danger_resist >= zone.danger;
+          // Use golem's individual danger_resist (may be boosted by upgrades)
+          return (g.danger_resist !== undefined ? g.danger_resist : GOLEM_TYPES[g.typeId].danger_resist) >= zone.danger;
         });
         if (available.length === 0) {
           slotsHtml += `<div class="zone-slot empty"><span style="color:var(--text-dim);font-size:10px;">[ empty — no eligible golems ]</span></div>`;
