@@ -423,27 +423,21 @@ function renderZones() {
               style="margin-top:3px;color:var(--amber);width:100%;">↩ Recall</button>
           </div>`;
       } else {
-        // Empty slot — show assign button with dropdown
-        const available = idleGolems().filter(g => {
-          // Use golem's individual danger_resist (may be boosted by upgrades)
-          return (g.danger_resist !== undefined ? g.danger_resist : GOLEM_TYPES[g.typeId].danger_resist) >= zone.danger;
-        });
+        // Empty slot — auto-assign first eligible idle golem on click
+        const available = idleGolems().filter(g =>
+          (g.danger_resist !== undefined ? g.danger_resist : GOLEM_TYPES[g.typeId].danger_resist) >= zone.danger
+        );
         if (available.length === 0) {
           slotsHtml += `<div class="zone-slot empty"><span style="color:var(--text-dim);font-size:10px;">[ empty — no eligible golems ]</span></div>`;
         } else {
-          const options = available.map(g => {
-            const d = GOLEM_TYPES[g.typeId];
-            return `<option value="${g.id}">${g.name} (T${d.tier})</option>`;
-          }).join("");
+          const next = available[0];
+          const nd = GOLEM_TYPES[next.typeId];
           slotsHtml += `
             <div class="zone-slot empty" id="zslot-${zone.id}-${i}">
-              <select class="zone-assign-select" id="zsel-${zone.id}-${i}" style="flex:1;">
-                <option value="">— assign golem —</option>
-                ${options}
-              </select>
+              <span style="font-size:10px;color:var(--text-dim);flex:1;">next: ${next.name} (T${nd.tier}, DR:${next.danger_resist})</span>
               <button class="btn-sm" data-action="assign-zone"
-                data-zone="${zone.id}" data-slot="${i}"
-                style="margin-left:4px;">▶ Send</button>
+                data-zone="${zone.id}" data-golem="${next.id}"
+                style="margin-left:4px;color:var(--green);">▶ Send</button>
             </div>`;
         }
       }
@@ -936,12 +930,9 @@ function setupEventDelegation() {
     const action = btn.dataset.action;
 
     if (action === 'assign-zone') {
-      const zoneId = btn.dataset.zone;
-      const slot   = btn.dataset.slot;
-      const selId  = `zsel-${zoneId}-${slot}`;
-      const sel    = document.getElementById(selId);
-      const golemId = sel ? Number(sel.value) : 0;
-      if (!golemId) { log("Select a golem first!", "warn"); return; }
+      const zoneId  = btn.dataset.zone;
+      const golemId = Number(btn.dataset.golem);
+      if (!golemId) { log("No eligible golem available!", "warn"); return; }
       assignGolemToZone(golemId, zoneId);
 
     } else if (action === 'recall-zone')    { recallGolem(Number(btn.dataset.golem));
