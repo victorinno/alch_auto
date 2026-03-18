@@ -59,7 +59,7 @@ header {
 /* ── LAYOUT ──────────────────────────────────────────── */
 #main-layout {
   display: grid;
-  grid-template-columns: 280px 1fr 280px;
+  grid-template-columns: 260px 1fr 260px;
   gap: 0;
   height: calc(100vh - 90px);
 }
