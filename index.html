@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alchemist's Automatons</title>
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
       </div>
     </header>
 
-    <!-- MAIN LAYOUT: World+Log | Workshop | Golems+Alchemy -->
+    <!-- MAIN LAYOUT: World+Log | Workshop | Zones -->
     <div id="main-layout">
 
       <!-- LEFT: WORLD MAP + EVENT LOG -->
@@ -36,7 +36,7 @@
         </div>
       </div>
 
-      <!-- CENTER: WORKSHOP (main interactions) -->
+      <!-- CENTER: WORKSHOP -->
       <div id="panel-workshop" class="panel">
         <h2 class="panel-title">[ Workshop ]</h2>
 
@@ -46,8 +46,18 @@
         </div>
 
         <div class="section">
+          <h3>Golem Roster</h3>
+          <div id="golem-roster"></div>
+        </div>
+
+        <div class="section">
           <h3>Craft Golem</h3>
           <div id="golem-recipes"></div>
+        </div>
+
+        <div class="section">
+          <h3>Alchemy Lab</h3>
+          <div id="alchemy-display"></div>
         </div>
 
         <div class="section">
@@ -56,15 +66,10 @@
         </div>
       </div>
 
-      <!-- RIGHT: GOLEMS + ALCHEMY -->
-      <div id="panel-golems" class="panel">
-        <h2 class="panel-title">[ Golems ]</h2>
-        <div id="golems-list"></div>
-
-        <div class="section" id="alchemy-section">
-          <h3>Alchemy Lab</h3>
-          <div id="alchemy-display"></div>
-        </div>
+      <!-- RIGHT: ZONES -->
+      <div id="panel-zones" class="panel">
+        <h2 class="panel-title">[ Zones ]</h2>
+        <div id="zones-panel"></div>
       </div>
 
     </div>
@@ -76,6 +81,6 @@
     </footer>
   </div>
 
-  <script src="game.js?v=6"></script>
+  <script src="game.js?v=7"></script>
 </body>
 </html>

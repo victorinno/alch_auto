@@ -1,6 +1,6 @@
 /* =====================================================
    ALCHEMIST'S AUTOMATONS — Game Logic
-   Idle / Automation RPG — Event-driven rendering
+   Idle / Automation RPG — Zone-based golem management
    ===================================================== */
 
 "use strict";
@@ -20,12 +20,13 @@ const RESOURCES = {
   clay:       { name: "Clay",            icon: "🧱", color: "#cc7744" },
 };
 
+// maxSlots = max golems that can work this zone simultaneously
 const ZONES = [
-  { id: "forest",  name: "Whispering Forest", icon: "🌲", ascii: "forest",  yields: ["herbs","crystals"],      danger: 0 },
-  { id: "mine",    name: "Iron Depths",        icon: "⛏️",  ascii: "mine",   yields: ["iron","crystals"],       danger: 1 },
-  { id: "swamp",   name: "Sulfur Swamp",       icon: "🌫️",  ascii: "swamp",  yields: ["sulfur","herbs"],        danger: 1 },
-  { id: "ruins",   name: "Ancient Ruins",      icon: "🏛️",  ascii: "ruins",  yields: ["moonstone","essence"],   danger: 2 },
-  { id: "volcano", name: "Ember Volcano",      icon: "🌋",  ascii: "volcano",yields: ["sulfur","moonstone"],    danger: 3 },
+  { id: "forest",  name: "Whispering Forest", icon: "🌲", ascii: "forest",  yields: ["herbs","crystals"],    danger: 0, maxSlots: 3 },
+  { id: "mine",    name: "Iron Depths",        icon: "⛏️",  ascii: "mine",   yields: ["iron","crystals"],     danger: 1, maxSlots: 3 },
+  { id: "swamp",   name: "Sulfur Swamp",       icon: "🌫️",  ascii: "swamp",  yields: ["sulfur","herbs"],      danger: 1, maxSlots: 2 },
+  { id: "ruins",   name: "Ancient Ruins",      icon: "🏛️",  ascii: "ruins",  yields: ["moonstone","essence"], danger: 2, maxSlots: 2 },
+  { id: "volcano", name: "Ember Volcano",      icon: "🌋",  ascii: "volcano",yields: ["sulfur","moonstone"],  danger: 3, maxSlots: 1 },
 ];
 
 const GOLEM_TYPES = {
@@ -49,14 +50,15 @@ const UPGRADES = [
   { id: "arcane_compass",   name: "Arcane Compass",    desc: "Golems travel 20% faster.",                     cost: { gold: 120, moonstone: 3, essence: 10 },      effect: () => { G.golemSpeedMult *= 0.80; },        purchased: false, requiresLevel: 1 },
   { id: "essence_condenser",name: "Essence Condenser", desc: "Alchemy produces +50% more essence.",           cost: { gold: 200, crystals: 10, moonstone: 5 },     effect: () => { G.essenceMult = (G.essenceMult||1)*1.5; }, purchased: false, requiresLevel: 2 },
   { id: "master_blueprint", name: "Master Blueprint",  desc: "Golem crafting costs reduced by 25%.",          cost: { gold: 300, essence: 20, moonstone: 8 },      effect: () => { G.craftCostMult *= 0.75; },         purchased: false, requiresLevel: 2 },
+  { id: "zone_expansion",   name: "Zone Expansion",    desc: "+1 slot in every zone.",                        cost: { gold: 400, moonstone: 10, essence: 20 },     effect: () => { ZONES.forEach(z => z.maxSlots++); }, purchased: false, requiresLevel: 2 },
   { id: "lunar_attunement", name: "Lunar Attunement",  desc: "Moon Golems gather from all zones simultaneously.", cost: { gold: 500, moonstone: 15, essence: 30 }, effect: () => { G.lunarAttunement = true; },        purchased: false, requiresLevel: 3 },
 ];
 
 const WORKSHOP_LEVELS = [
-  { level: 0, name: "Novice Lab",     maxGolems: 2,  cost: null },
-  { level: 1, name: "Journeyman Lab", maxGolems: 4,  cost: { gold: 100, iron: 10 } },
-  { level: 2, name: "Adept Lab",      maxGolems: 6,  cost: { gold: 250, crystals: 8, essence: 10 } },
-  { level: 3, name: "Master Lab",     maxGolems: 10, cost: { gold: 600, moonstone: 6, essence: 25 } },
+  { level: 0, name: "Novice Lab",     maxGolems: 3,  cost: null },
+  { level: 1, name: "Journeyman Lab", maxGolems: 6,  cost: { gold: 100, iron: 10 } },
+  { level: 2, name: "Adept Lab",      maxGolems: 12, cost: { gold: 250, crystals: 8, essence: 10 } },
+  { level: 3, name: "Master Lab",     maxGolems: 25, cost: { gold: 600, moonstone: 6, essence: 25 } },
 ];
 
 const ASCII_MAPS = {
@@ -130,6 +132,18 @@ function log(msg, type = "info") {
 }
 
 // ─────────────────────────────────────────────────────
+// GOLEM HELPERS
+// ─────────────────────────────────────────────────────
+
+function idleGolems() {
+  return G.golems.filter(g => g.state === "idle");
+}
+
+function golemsInZone(zoneId) {
+  return G.golems.filter(g => g.zoneId === zoneId && g.state !== "idle");
+}
+
+// ─────────────────────────────────────────────────────
 // GOLEM LOGIC
 // ─────────────────────────────────────────────────────
 
@@ -141,35 +155,44 @@ function craftGolem(typeId) {
   if (G.golems.length >= maxGolems) { log("Golem dock is full! Upgrade workshop.", "warn"); return; }
   if (!canAfford(def.cost, G.craftCostMult)) { log(`Not enough resources to craft ${def.name}.`, "warn"); return; }
   spend(def.cost, G.craftCostMult);
-  const golem = { id: G.nextGolemId++, typeId, name: `${def.name} #${G.nextGolemId-1}`, state:"idle", zoneId:null, tripStart:null, tripEnd:null, tripPhase:null, collected:{} };
+  const golem = {
+    id: G.nextGolemId++, typeId, name: `${def.name} #${G.nextGolemId-1}`,
+    state: "idle", zoneId: null, tripStart: null, tripEnd: null, tripPhase: null, collected: {}
+  };
   G.golems.push(golem);
   log(`✨ Crafted ${golem.name}!`, "great");
-  addGolemCard(golem);
+  renderGolemRoster();
+  renderZones();
   renderRecipes();
   renderResources();
   renderFooter();
 }
 
-function sendGolem(golemId, zoneId) {
+function assignGolemToZone(golemId, zoneId) {
   const golem = G.golems.find(g => g.id == golemId);
   const zone  = ZONES.find(z => z.id === zoneId);
-  if (!golem || !zone || golem.state !== "idle") return;
+  if (!golem || !zone) return;
+  if (golem.state !== "idle") { log(`${golem.name} is busy!`, "warn"); return; }
   const def = GOLEM_TYPES[golem.typeId];
-  if (zone.danger > def.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}!`, "warn"); return; }
+  if (zone.danger > def.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}! Too dangerous.`, "warn"); return; }
+  if (golemsInZone(zoneId).length >= zone.maxSlots) { log(`${zone.name} is full! (${zone.maxSlots} slots)`, "warn"); return; }
   const speed = def.speed * G.golemSpeedMult;
   golem.state = "traveling"; golem.zoneId = zoneId; golem.tripPhase = "out";
-  golem.tripStart = Date.now(); golem.tripEnd = Date.now() + speed*1000; golem.collected = {};
+  golem.tripStart = Date.now(); golem.tripEnd = Date.now() + speed * 1000; golem.collected = {};
   log(`🚶 ${golem.name} → ${zone.name}`, "info");
-  updateGolemCardState(golem);
+  renderZones();
+  renderGolemRoster();
   renderMap(zoneId);
 }
 
 function recallGolem(golemId) {
   const golem = G.golems.find(g => g.id == golemId);
   if (!golem || golem.state === "idle") return;
+  const zoneName = ZONES.find(z => z.id === golem.zoneId)?.name || "zone";
   golem.state = "idle"; golem.zoneId = null; golem.tripStart = null; golem.tripEnd = null; golem.collected = {};
-  log(`🔔 ${golem.name} recalled.`, "warn");
-  updateGolemCardState(golem);
+  log(`🔔 ${golem.name} recalled from ${zoneName}.`, "warn");
+  renderZones();
+  renderGolemRoster();
   renderMap(null);
 }
 
@@ -177,18 +200,17 @@ function destroyGolem(golemId) {
   const idx = G.golems.findIndex(g => g.id == golemId);
   if (idx === -1) return;
   const golem = G.golems[idx];
+  if (golem.state !== "idle") { log(`Recall ${golem.name} before dismantling!`, "warn"); return; }
   const def = GOLEM_TYPES[golem.typeId];
   const refund = {};
-  for (const [r,a] of Object.entries(def.cost)) refund[r] = Math.floor(a*0.5);
+  for (const [r,a] of Object.entries(def.cost)) refund[r] = Math.floor(a * 0.5);
   gain(refund);
   G.golems.splice(idx, 1);
-  const card = document.getElementById(`golem-card-${golemId}`);
-  if (card) card.remove();
-  const el = document.getElementById("golems-list");
-  if (el && G.golems.length === 0) el.innerHTML = `<div style="color:var(--text-dim);font-size:12px;padding:8px;">No golems yet. Craft one in the Workshop!</div>`;
   log(`💀 ${golem.name} dismantled. 50% materials refunded.`, "warn");
-  renderResources();
+  renderGolemRoster();
+  renderZones();
   renderRecipes();
+  renderResources();
   renderFooter();
 }
 
@@ -201,9 +223,9 @@ function tickGolems(now) {
     const speed = def.speed * G.golemSpeedMult;
 
     if (golem.state === "traveling" && golem.tripPhase === "out" && now >= golem.tripEnd) {
-      golem.state = "gathering"; golem.tripStart = now; golem.tripEnd = now + 2000;
+      golem.state = "gathering"; golem.tripStart = now; golem.tripEnd = now + 3000;
       log(`⛏️  ${golem.name} arrived at ${zone.name}.`, "info");
-      updateGolemCardState(golem); stateChanged = true;
+      updateZoneGolemRow(golem); stateChanged = true;
 
     } else if (golem.state === "gathering" && now >= golem.tripEnd) {
       const capacity = def.capacity + G.golemBonusCapacity;
@@ -216,9 +238,9 @@ function tickGolems(now) {
         golem.collected[res] = (golem.collected[res]||0) + amt;
         remaining -= amt;
       }
-      golem.state = "traveling"; golem.tripPhase = "back"; golem.tripStart = now; golem.tripEnd = now + speed*1000;
+      golem.state = "traveling"; golem.tripPhase = "back"; golem.tripStart = now; golem.tripEnd = now + speed * 1000;
       log(`📦 ${golem.name} gathered, heading back...`, "info");
-      updateGolemCardState(golem); stateChanged = true;
+      updateZoneGolemRow(golem); stateChanged = true;
 
     } else if (golem.state === "traveling" && golem.tripPhase === "back" && now >= golem.tripEnd) {
       let summary = [];
@@ -228,7 +250,8 @@ function tickGolems(now) {
       }
       log(`✅ ${golem.name} returned: ${summary.join(" ")}`, "good");
       golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null; golem.collected = {};
-      updateGolemCardState(golem);
+      renderZones();
+      renderGolemRoster();
       renderResources(); renderRecipes(); renderAlchemy(); stateChanged = true;
     }
   }
@@ -261,7 +284,7 @@ function tickAlchemy(now) {
       const rewards = {};
       for (const [res, amt] of Object.entries(recipe.produces)) {
         const mult = res === "essence" ? (G.essenceMult||1) : 1;
-        rewards[res] = Math.floor(amt*mult);
+        rewards[res] = Math.floor(amt * mult);
       }
       gain(rewards);
       const summary = Object.entries(rewards).map(([r,a])=>`${a}x ${RESOURCES[r].icon}`).join(" ");
@@ -301,10 +324,164 @@ function buyUpgrade(upgradeId) {
   log(`🔧 Upgrade purchased: ${upg.name}!`, "great");
   renderUpgrades();
   renderResources();
+  renderZones();
 }
 
 // ─────────────────────────────────────────────────────
-// RENDER — STATIC RENDERS (called on state change)
+// RENDER — ZONE PANEL (right panel)
+// ─────────────────────────────────────────────────────
+
+function renderZones() {
+  const el = document.getElementById("zones-panel");
+  if (!el) return;
+
+  el.innerHTML = ZONES.map(zone => {
+    const active = golemsInZone(zone.id);
+    const slots  = zone.maxSlots;
+    const yieldsStr = zone.yields.map(r => RESOURCES[r].icon).join(" ");
+    const dangerStr = "⚠️".repeat(zone.danger) || "✅";
+
+    // Build slot rows
+    let slotsHtml = "";
+    for (let i = 0; i < slots; i++) {
+      const golem = active[i];
+      if (golem) {
+        // Occupied slot — show golem info + recall button
+        const def = GOLEM_TYPES[golem.typeId];
+        const stateLabel =
+          golem.state === "traveling" && golem.tripPhase === "out" ? "→ traveling" :
+          golem.state === "gathering" ? "⛏️ gathering" :
+          golem.state === "traveling" && golem.tripPhase === "back" ? "← returning" : "idle";
+        slotsHtml += `
+          <div class="zone-slot occupied" id="zslot-${zone.id}-${i}">
+            <span class="slot-golem-name">${golem.name}</span>
+            <span class="slot-tier">T${def.tier}</span>
+            <span class="slot-state" id="zstate-${golem.id}">${stateLabel}</span>
+            <div class="slot-progress-bar">
+              <div class="slot-progress-fill" id="zprog-${golem.id}" style="width:0%"></div>
+            </div>
+            <button class="btn-sm" data-action="recall-zone" data-golem="${golem.id}"
+              style="margin-top:3px;color:var(--amber);width:100%;">↩ Recall</button>
+          </div>`;
+      } else {
+        // Empty slot — show assign button with dropdown
+        const available = idleGolems().filter(g => {
+          const d = GOLEM_TYPES[g.typeId];
+          return d.danger_resist >= zone.danger;
+        });
+        if (available.length === 0) {
+          slotsHtml += `<div class="zone-slot empty"><span style="color:var(--text-dim);font-size:10px;">[ empty — no eligible golems ]</span></div>`;
+        } else {
+          const options = available.map(g => {
+            const d = GOLEM_TYPES[g.typeId];
+            return `<option value="${g.id}">${g.name} (T${d.tier})</option>`;
+          }).join("");
+          slotsHtml += `
+            <div class="zone-slot empty" id="zslot-${zone.id}-${i}">
+              <select class="zone-assign-select" id="zsel-${zone.id}-${i}" style="flex:1;">
+                <option value="">— assign golem —</option>
+                ${options}
+              </select>
+              <button class="btn-sm" data-action="assign-zone"
+                data-zone="${zone.id}" data-slot="${i}"
+                style="margin-left:4px;">▶ Send</button>
+            </div>`;
+        }
+      }
+    }
+
+    return `
+      <div class="zone-card" id="zcard-${zone.id}">
+        <div class="zone-header">
+          <span class="zone-icon">${zone.icon}</span>
+          <span class="zone-name">${zone.name}</span>
+          <span class="zone-meta">${dangerStr} | ${yieldsStr} | ${active.length}/${slots} slots</span>
+        </div>
+        <div class="zone-slots" id="zslots-${zone.id}">
+          ${slotsHtml}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+// Update only the state label and progress bar of a golem row (called from tickGolems)
+function updateZoneGolemRow(golem) {
+  const stateEl = document.getElementById(`zstate-${golem.id}`);
+  if (stateEl) {
+    const stateLabel =
+      golem.state === "traveling" && golem.tripPhase === "out" ? "→ traveling" :
+      golem.state === "gathering" ? "⛏️ gathering" :
+      golem.state === "traveling" && golem.tripPhase === "back" ? "← returning" : "idle";
+    stateEl.textContent = stateLabel;
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// RENDER — GOLEM ROSTER (compact list in workshop)
+// ─────────────────────────────────────────────────────
+
+function renderGolemRoster() {
+  const el = document.getElementById("golem-roster");
+  if (!el) return;
+  const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
+  if (G.golems.length === 0) {
+    el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;padding:4px;">No golems yet. Craft one below!</div>`;
+    return;
+  }
+  el.innerHTML = G.golems.map(golem => {
+    const def = GOLEM_TYPES[golem.typeId];
+    const zone = ZONES.find(z => z.id === golem.zoneId);
+    const statusColor = golem.state === "idle" ? "var(--amber)" : "var(--green)";
+    const statusText  = golem.state === "idle" ? "Idle" : `→ ${zone?.name || "?"}`;
+    return `<div class="roster-row" id="roster-${golem.id}">
+      <span class="roster-name">${golem.name}</span>
+      <span class="roster-tier" style="color:var(--text-dim)">T${def.tier}</span>
+      <span class="roster-status" id="rstatus-${golem.id}" style="color:${statusColor}">${statusText}</span>
+      ${golem.state === "idle"
+        ? `<button class="btn-sm" data-action="destroy-golem" data-golem="${golem.id}"
+             style="color:var(--red);margin-left:4px;">✕</button>`
+        : `<button class="btn-sm" data-action="recall-zone" data-golem="${golem.id}"
+             style="color:var(--amber);margin-left:4px;">↩</button>`
+      }
+    </div>`;
+  }).join("");
+}
+
+// ─────────────────────────────────────────────────────
+// RENDER — PROGRESS BARS (called every frame)
+// ─────────────────────────────────────────────────────
+
+function tickProgressBars(now) {
+  for (const golem of G.golems) {
+    if (golem.state === "idle" || !golem.tripStart || !golem.tripEnd) continue;
+    const pct = Math.min(100, ((now - golem.tripStart) / (golem.tripEnd - golem.tripStart)) * 100);
+    const progEl = document.getElementById(`zprog-${golem.id}`);
+    if (progEl) progEl.style.width = `${pct}%`;
+    const stateEl = document.getElementById(`zstate-${golem.id}`);
+    if (stateEl) {
+      const zone = ZONES.find(z => z.id === golem.zoneId);
+      if (golem.state === "traveling" && golem.tripPhase === "out")
+        stateEl.textContent = `→ traveling ${Math.floor(pct)}%`;
+      else if (golem.state === "gathering")
+        stateEl.textContent = `⛏️ gathering ${Math.floor(pct)}%`;
+      else if (golem.state === "traveling" && golem.tripPhase === "back")
+        stateEl.textContent = `← returning ${Math.floor(pct)}%`;
+    }
+  }
+
+  // Alchemy progress bars
+  for (const job of G.alchemyQueue) {
+    const pct = Math.min(100, ((now - job.startTime) / (job.endTime - job.startTime)) * 100);
+    const remaining = Math.max(0, Math.ceil((job.endTime - now) / 1000));
+    const progEl = document.getElementById(`aprog-${job.recipeId}`);
+    const timeEl = document.getElementById(`atime-${job.recipeId}`);
+    if (progEl) progEl.style.width = `${pct}%`;
+    if (timeEl) timeEl.textContent = `${remaining}s`;
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// RENDER — RESOURCES, RECIPES, ALCHEMY, UPGRADES
 // ─────────────────────────────────────────────────────
 
 function renderResources() {
@@ -338,135 +515,10 @@ function renderRecipes() {
     }).join("");
 }
 
-// ─────────────────────────────────────────────────────
-// GOLEM CARD — DOM-based, created once per golem
-// ─────────────────────────────────────────────────────
-
-function addGolemCard(golem) {
-  const el = document.getElementById("golems-list");
-  if (!el) return;
-
-  // Remove "no golems" placeholder if present
-  const placeholder = el.querySelector('[data-placeholder]');
-  if (placeholder) placeholder.remove();
-
-  const def = GOLEM_TYPES[golem.typeId];
-
-  const div = document.createElement('div');
-  div.id = `golem-card-${golem.id}`;
-  div.className = 'golem-card idle';
-
-  // Build zone buttons
-  const zoneBtnsHtml = ZONES.map(z => {
-    const canGo = def.danger_resist >= z.danger;
-    return `<button class="btn zone-btn" id="zbtn-${golem.id}-${z.id}"
-      data-action="send-zone" data-golem="${golem.id}" data-zone="${z.id}"
-      ${!canGo ? 'disabled title="Too dangerous"' : ''}
-      style="flex:1;min-width:0;font-size:11px;padding:3px 4px;${!canGo?'opacity:0.4;':''}"
-      >${z.icon} ${z.name.split(' ')[0]}</button>`;
-  }).join("");
-
-  div.innerHTML = `
-    <div class="golem-header">
-      <span class="golem-name">${golem.name}</span>
-      <span class="golem-type">Tier ${def.tier}</span>
-    </div>
-    <pre class="golem-ascii">${def.ascii}</pre>
-    <div class="golem-status" id="gstatus-${golem.id}">Idle — awaiting orders</div>
-    <div class="golem-progress-bar">
-      <div class="golem-progress-fill" id="gprog-${golem.id}" style="width:0%"></div>
-    </div>
-    <div style="margin-top:6px;">
-      <div style="color:var(--text-dim);font-size:10px;margin-bottom:3px;">SEND TO ZONE:</div>
-      <div id="zone-btns-${golem.id}" style="display:flex;gap:3px;flex-wrap:wrap;">
-        ${zoneBtnsHtml}
-      </div>
-    </div>
-    <div style="display:flex;gap:6px;margin-top:6px;">
-      <button class="btn" id="gbtn-recall-${golem.id}" disabled
-        style="flex:1;font-size:11px;"
-        data-action="recall" data-golem="${golem.id}">↩️ Recall</button>
-      <button class="btn" style="flex:1;font-size:11px;color:var(--red);"
-        data-action="destroy" data-golem="${golem.id}">💀 Destroy</button>
-    </div>`;
-  el.appendChild(div);
-}
-
-function updateGolemCardState(golem) {
-  const card = document.getElementById(`golem-card-${golem.id}`);
-  if (!card) return;
-  const isIdle = golem.state === "idle";
-  const def = GOLEM_TYPES[golem.typeId];
-  card.className = `golem-card ${isIdle ? 'idle' : 'busy'}`;
-
-  // Enable/disable zone buttons
-  ZONES.forEach(z => {
-    const zbtn = document.getElementById(`zbtn-${golem.id}-${z.id}`);
-    if (zbtn) {
-      const canGo = def.danger_resist >= z.danger;
-      zbtn.disabled = !isIdle || !canGo;
-    }
-  });
-
-  const recBtn = document.getElementById(`gbtn-recall-${golem.id}`);
-  if (recBtn)  recBtn.disabled  = isIdle;
-
-  // Reset status text immediately on state change
-  const statusEl = document.getElementById(`gstatus-${golem.id}`);
-  const zone = ZONES.find(z => z.id === golem.zoneId);
-  if (statusEl) {
-    if (isIdle) statusEl.textContent = "Idle — awaiting orders";
-    else if (golem.state === "traveling" && golem.tripPhase === "out") statusEl.textContent = `→ Traveling to ${zone?.name}...`;
-    else if (golem.state === "gathering") statusEl.textContent = `⛏️  Gathering at ${zone?.name}...`;
-    else if (golem.state === "traveling" && golem.tripPhase === "back") statusEl.textContent = `← Returning from ${zone?.name}...`;
-  }
-
-  const progEl = document.getElementById(`gprog-${golem.id}`);
-  if (progEl && isIdle) progEl.style.width = "0%";
-}
-
-// ─────────────────────────────────────────────────────
-// RENDER — PROGRESS ONLY (called every frame from gameLoop)
-// ─────────────────────────────────────────────────────
-
-function tickProgressBars(now) {
-  for (const golem of G.golems) {
-    if (golem.state === "idle" || !golem.tripStart || !golem.tripEnd) continue;
-    const pct = Math.min(100, ((now - golem.tripStart) / (golem.tripEnd - golem.tripStart)) * 100);
-    const progEl = document.getElementById(`gprog-${golem.id}`);
-    if (progEl) progEl.style.width = `${pct}%`;
-    const statusEl = document.getElementById(`gstatus-${golem.id}`);
-    const zone = ZONES.find(z => z.id === golem.zoneId);
-    if (statusEl) {
-      if (golem.state === "traveling" && golem.tripPhase === "out")
-        statusEl.textContent = `→ Traveling to ${zone?.name}... ${Math.floor(pct)}%`;
-      else if (golem.state === "gathering")
-        statusEl.textContent = `⛏️  Gathering at ${zone?.name}... ${Math.floor(pct)}%`;
-      else if (golem.state === "traveling" && golem.tripPhase === "back")
-        statusEl.textContent = `← Returning from ${zone?.name}... ${Math.floor(pct)}%`;
-    }
-  }
-
-  // Alchemy progress bars
-  for (const job of G.alchemyQueue) {
-    const pct = Math.min(100, ((now - job.startTime) / (job.endTime - job.startTime)) * 100);
-    const remaining = Math.max(0, Math.ceil((job.endTime - now) / 1000));
-    const progEl = document.getElementById(`aprog-${job.recipeId}`);
-    const timeEl = document.getElementById(`atime-${job.recipeId}`);
-    if (progEl) progEl.style.width = `${pct}%`;
-    if (timeEl) timeEl.textContent = `${remaining}s`;
-  }
-}
-
-// ─────────────────────────────────────────────────────
-// ALCHEMY RENDER
-// ─────────────────────────────────────────────────────
-
 function renderAlchemy() {
   const el = document.getElementById("alchemy-display");
   if (!el) return;
   let html = "";
-
   if (G.alchemyQueue.length > 0) {
     html += `<div style="margin-bottom:8px;color:var(--text-dim);font-size:11px;">Active (${G.alchemyQueue.length}/3):</div>`;
     html += G.alchemyQueue.map(job => {
@@ -482,7 +534,6 @@ function renderAlchemy() {
       </div>`;
     }).join("");
   }
-
   html += `<div style="margin-top:6px;">`;
   html += ALCHEMY_RECIPES.map(recipe => {
     if (!recipe.unlocked) return `<div class="recipe-row"><span style="color:var(--text-dim)">🔒 ${recipe.name}</span><span class="recipe-cost">Lvl ${recipe.requiresLevel}</span></div>`;
@@ -510,7 +561,6 @@ function renderUpgrades() {
         <div class="btn-cost">${Object.entries(nextLevel.cost).map(([r,a])=>`${a}x ${RESOURCES[r].icon}`).join(" ")}</div>
       </button>`
     : `<div style="color:var(--green-dim);font-size:11px;">Workshop at MAX level!</div>`;
-
   const upgradesHtml = UPGRADES.map(upg => {
     const locked = upg.requiresLevel > G.workshopLevel;
     const affordable = canAfford(upg.cost) && !upg.purchased && !locked;
@@ -549,7 +599,8 @@ function renderFooter() {
   const el = document.getElementById("footer-time");
   if (el) {
     const wl = WORKSHOP_LEVELS[G.workshopLevel];
-    el.textContent = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${G.golems.length}/${wl.maxGolems} | Time: ${fmtTime(G.totalTime)}`;
+    const busy = G.golems.filter(g => g.state !== "idle").length;
+    el.textContent = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${G.golems.length}/${wl.maxGolems} (${busy} active) | Time: ${fmtTime(G.totalTime)}`;
   }
 }
 
@@ -560,20 +611,8 @@ function renderAll() {
   renderUpgrades();
   renderMap(null);
   renderFooter();
-
-  // Rebuild golem cards from saved state
-  const el = document.getElementById("golems-list");
-  if (el) {
-    el.innerHTML = "";
-    if (G.golems.length === 0) {
-      el.innerHTML = `<div data-placeholder style="color:var(--text-dim);font-size:12px;padding:8px;">No golems yet. Craft one in the Workshop!</div>`;
-    } else {
-      G.golems.forEach(golem => {
-        addGolemCard(golem);
-        updateGolemCardState(golem);
-      });
-    }
-  }
+  renderGolemRoster();
+  renderZones();
 }
 
 // ─────────────────────────────────────────────────────
@@ -591,6 +630,7 @@ function saveGame() {
       totalTime: G.totalTime, prestigeCount: G.prestigeCount,
       upgrades: UPGRADES.map(u=>({id:u.id,purchased:u.purchased})),
       recipes: ALCHEMY_RECIPES.map(r=>({id:r.id,unlocked:r.unlocked})),
+      zoneSlotsOverride: ZONES.map(z=>({id:z.id,maxSlots:z.maxSlots})),
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -622,6 +662,10 @@ function loadGame() {
       const rec = ALCHEMY_RECIPES.find(r=>r.id===sr.id);
       if (rec) rec.unlocked = sr.unlocked;
     });
+    if (save.zoneSlotsOverride) save.zoneSlotsOverride.forEach(sz => {
+      const zone = ZONES.find(z=>z.id===sz.id);
+      if (zone) zone.maxSlots = sz.maxSlots;
+    });
     const elapsed = Math.floor((Date.now() - (save.savedAt||Date.now())) / 1000);
     if (elapsed > 5) {
       log(`⏰ Welcome back! Away for ${fmtTime(elapsed)}.`, "great");
@@ -630,17 +674,22 @@ function loadGame() {
           const def  = GOLEM_TYPES[golem.typeId];
           const zone = ZONES.find(z=>z.id===golem.zoneId);
           const tripTime = def.speed * G.golemSpeedMult;
-          const trips = Math.floor(elapsed / (tripTime*2+2));
+          const trips = Math.floor(elapsed / (tripTime*2+3));
           if (trips > 0 && zone) {
             const capacity = def.capacity + G.golemBonusCapacity;
             for (let t=0; t<trips; t++) {
               let remaining = capacity;
               const yields = [...zone.yields];
-              while (remaining > 0) { const res=randomFrom(yields); const amt=Math.min(remaining,Math.ceil(Math.random()*3)+1); G.resources[res]=(G.resources[res]||0)+amt; remaining-=amt; }
+              while (remaining > 0) {
+                const res = randomFrom(yields);
+                const amt = Math.min(remaining, Math.ceil(Math.random()*3)+1);
+                G.resources[res] = (G.resources[res]||0) + amt;
+                remaining -= amt;
+              }
             }
             log(`📦 ${golem.name} made ${trips} trips while away!`, "good");
           }
-          golem.state="idle"; golem.zoneId=null; golem.tripPhase=null;
+          golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null;
         }
       });
     }
@@ -649,7 +698,7 @@ function loadGame() {
 }
 
 // ─────────────────────────────────────────────────────
-// MAIN GAME LOOP — only ticks logic + updates progress bars
+// MAIN GAME LOOP
 // ─────────────────────────────────────────────────────
 
 let lastTick = Date.now();
@@ -665,14 +714,11 @@ function gameLoop() {
   tickAlchemy(now);
   tickProgressBars(now);
 
-  // Update footer timer every second
   saveTimer += delta;
   if (saveTimer >= 1000) {
     renderFooter();
     saveTimer -= 1000;
   }
-
-  // Auto-save every 30s
   if (Math.floor(G.totalTime) % 30 === 0 && Math.floor(G.totalTime) > 0) saveGame();
 
   requestAnimationFrame(gameLoop);
@@ -688,15 +734,21 @@ function setupEventDelegation() {
     if (!btn || btn.disabled) return;
     const action = btn.dataset.action;
 
-    if (action === 'send-zone') {
-      sendGolem(Number(btn.dataset.golem), btn.dataset.zone);
+    if (action === 'assign-zone') {
+      const zoneId = btn.dataset.zone;
+      const slot   = btn.dataset.slot;
+      const selId  = `zsel-${zoneId}-${slot}`;
+      const sel    = document.getElementById(selId);
+      const golemId = sel ? Number(sel.value) : 0;
+      if (!golemId) { log("Select a golem first!", "warn"); return; }
+      assignGolemToZone(golemId, zoneId);
 
-    } else if (action === 'recall')          { recallGolem(Number(btn.dataset.golem));
-    } else if (action === 'destroy')         { destroyGolem(Number(btn.dataset.golem));
-    } else if (action === 'craft')           { craftGolem(btn.dataset.type);
-    } else if (action === 'brew')            { startAlchemy(btn.dataset.recipe);
+    } else if (action === 'recall-zone')    { recallGolem(Number(btn.dataset.golem));
+    } else if (action === 'destroy-golem')  { destroyGolem(Number(btn.dataset.golem));
+    } else if (action === 'craft')          { craftGolem(btn.dataset.type);
+    } else if (action === 'brew')           { startAlchemy(btn.dataset.recipe);
     } else if (action === 'upgrade-workshop'){ upgradeWorkshop();
-    } else if (action === 'buy-upgrade')     { buyUpgrade(btn.dataset.upgrade);
+    } else if (action === 'buy-upgrade')    { buyUpgrade(btn.dataset.upgrade);
     }
   });
 }
@@ -710,7 +762,7 @@ window.addEventListener("DOMContentLoaded", function() {
   renderAll();
   setupEventDelegation();
   log("🧪 Welcome, Alchemist! Craft your first Golem to begin.", "great");
-  log("💡 Tip: Select a zone from the dropdown and click Send ▶ to dispatch a golem.", "info");
-  log("💡 Tip: Use the Alchemy Lab to brew potions and earn Gold.", "info");
+  log("💡 Tip: Craft a golem, then assign it to a zone using the Zones panel.", "info");
+  log("💡 Tip: Each zone has limited slots — manage your golems wisely!", "info");
   requestAnimationFrame(gameLoop);
 });
