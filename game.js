@@ -523,16 +523,35 @@ function renderRecipes() {
   if (!el) return;
   const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
   const slots = maxGolems - G.golems.length;
-  el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px;">Golem slots: ${G.golems.length}/${maxGolems}</div>`
+  el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px;">Golem slots: ${G.golems.length}/${maxGolems} &mdash; <span style="color:${slots>0?'var(--green)':'var(--red)'}">${slots} slot(s) free</span></div>`
     + Object.entries(GOLEM_TYPES).map(([typeId, def]) => {
-      const locked = G.workshopLevel < def.unlock;
-      const costStr = Object.entries(def.cost).map(([r,a])=>`${Math.ceil(a*G.craftCostMult)}x ${RESOURCES[r].icon}`).join(" ");
-      const affordable = canAfford(def.cost, G.craftCostMult) && slots > 0 && !locked;
-      return `<button class="btn ${locked?'':'btn-amber'}" data-action="craft" data-type="${typeId}" ${(!affordable||locked)?'disabled':''}>
-        ${locked?"🔒":def.ascii.split("\n")[0]} ${def.name}
-        ${locked?`<span style="color:var(--red)"> [Lvl ${def.unlock} required]</span>`:""}
-        <div class="btn-cost">${costStr}</div>
-      </button>`;
+      const workshopLocked = G.workshopLevel < def.unlock;
+      const noSlots = slots <= 0;
+      const costMissing = !canAfford(def.cost, G.craftCostMult);
+      const canCraft = !workshopLocked && !noSlots && !costMissing;
+
+      // Build cost string, highlighting missing resources in red
+      const costStr = Object.entries(def.cost).map(([r,a]) => {
+        const need = Math.ceil(a * G.craftCostMult);
+        const have = G.resources[r] || 0;
+        const color = have >= need ? 'var(--green)' : 'var(--red)';
+        return `<span style="color:${color}">${need}x ${RESOURCES[r].icon}${RESOURCES[r].name} (${have})</span>`;
+      }).join(" ");
+
+      // Reason why disabled
+      let blockReason = "";
+      if (workshopLocked) blockReason = `<span style="color:var(--red)"> ⚠ Requires Workshop Lvl ${def.unlock}</span>`;
+      else if (noSlots)   blockReason = `<span style="color:var(--red)"> ⚠ No golem slots free — upgrade Workshop!</span>`;
+
+      return `<div style="border:1px solid var(--border);padding:6px 8px;margin-bottom:6px;background:var(--bg3);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span style="color:${workshopLocked?'var(--text-dim)':'var(--amber)'}">${workshopLocked?'\uD83D\uDD12':def.ascii.split('\n')[0]} ${def.name} <span style="color:var(--text-dim);font-size:10px;">Tier ${def.tier}</span></span>
+          <button class="btn btn-amber" data-action="craft" data-type="${typeId}" ${canCraft?'':'disabled'}
+            style="padding:2px 10px;font-size:11px;">${canCraft ? 'Craft' : workshopLocked ? '\uD83D\uDD12 Locked' : noSlots ? 'No Slots' : 'Missing'}</button>
+        </div>
+        <div style="font-size:10px;">${costStr}</div>
+        ${blockReason ? `<div style="font-size:10px;margin-top:3px;">${blockReason}</div>` : ''}
+      </div>`;
     }).join("");
 }
 
