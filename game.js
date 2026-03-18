@@ -74,7 +74,7 @@ const WORKSHOP_LEVELS = [
   { level: 0, name: "Novice Lab",     maxGolems: 3,  cost: null },
   // Level 1 — achievable with gold from herb tonics + crystals from forest
   { level: 1, name: "Journeyman Lab", maxGolems: 6,  cost: { gold: 60, crystals: 8 } },
-  { level: 2, name: "Adept Lab",      maxGolems: 12, cost: { gold: 200, essence: 10, iron: 6 } },
+  { level: 2, name: "Adept Lab",      maxGolems: 12, cost: { gold: 180, essence: 12, crystals: 6 } },
   { level: 3, name: "Master Lab",     maxGolems: 25, cost: { gold: 500, moonstone: 5, essence: 20 } },
 ];
 
@@ -312,7 +312,7 @@ function tickAlchemy(now) {
     }
     return true;
   });
-  if (changed) { renderResources(); renderAlchemy(); }
+  if (changed) { renderResources(); renderAlchemy(); renderRecipes(); renderUpgrades(); }
   return changed;
 }
 
