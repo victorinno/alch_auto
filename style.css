@@ -59,31 +59,9 @@ header {
 /* ── LAYOUT ──────────────────────────────────────────── */
 #main-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 260px 1fr 320px;
   gap: 0;
   height: calc(100vh - 90px);
-}
-
-#right-column {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-#panel-world {
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--border);
-  overflow-y: auto;
-  padding: 10px;
-  background: var(--bg2);
-}
-
-#panel-golems {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 10px;
-  background: var(--bg2);
 }
 
 .panel {
@@ -179,16 +157,16 @@ header {
 
 /* ── ASCII MAP ───────────────────────────────────────── */
 #ascii-map {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 9px;
+  line-height: 1.4;
   background: var(--bg);
   border: 1px solid var(--border);
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  min-height: 200px;
+  padding: 8px;
+  margin-bottom: 10px;
+  min-height: 160px;
   white-space: pre;
   overflow: hidden;
-  text-align: center;
+  text-align: left;
 }
 
 /* ── EVENT LOG ───────────────────────────────────────── */
@@ -201,11 +179,12 @@ header {
 #event-log {
   background: var(--bg);
   border: 1px solid var(--border);
-  padding: 8px;
-  height: 260px;
+  padding: 6px;
+  height: calc(100vh - 420px);
+  min-height: 120px;
   overflow-y: auto;
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .log-entry { border-bottom: 1px dotted #1a2a1a; padding: 1px 0; }
@@ -351,9 +330,6 @@ header {
 @media (max-width: 900px) {
   #main-layout {
     grid-template-columns: 1fr;
-    height: auto;
-  }
-  #right-column {
     height: auto;
   }
   .title-ascii pre { font-size: 5px; }
