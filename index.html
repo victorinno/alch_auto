@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alchemist's Automatons</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- HEADER -->
+    <header>
+      <div class="title-ascii">
+        <pre>
+ █████╗ ██╗      ██████╗██╗  ██╗███████╗███╗   ███╗██╗███████╗████████╗
+██╔══██╗██║     ██╔════╝██║  ██║██╔════╝████╗ ████║██║██╔════╝╚══██╔══╝
+███████║██║     ██║     ███████║█████╗  ██╔████╔██║██║███████╗   ██║   
+██╔══██║██║     ██║     ██╔══██║██╔══╝  ██║╚██╔╝██║██║╚════██║   ██║   
+██║  ██║███████╗╚██████╗██║  ██║███████╗██║ ╚═╝ ██║██║███████║   ██║   
+╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝╚══════╝   ╚═╝  
+        </pre>
+        <p class="subtitle">~ Automatons &amp; Golems ~</p>
+      </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <div id="main-layout">
+
+      <!-- LEFT: WORKSHOP -->
+      <div id="panel-workshop" class="panel">
+        <h2 class="panel-title">[ Workshop ]</h2>
+
+        <!-- RESOURCES -->
+        <div class="section">
+          <h3>Resources</h3>
+          <div id="resources-display"></div>
+        </div>
+
+        <!-- CRAFT GOLEM -->
+        <div class="section">
+          <h3>Craft Golem</h3>
+          <div id="golem-recipes"></div>
+        </div>
+
+        <!-- UPGRADE WORKSHOP -->
+        <div class="section">
+          <h3>Upgrades</h3>
+          <div id="upgrades-display"></div>
+        </div>
+      </div>
+
+      <!-- CENTER: WORLD MAP / LOG -->
+      <div id="panel-world" class="panel">
+        <h2 class="panel-title">[ World ]</h2>
+        <div id="ascii-map"></div>
+        <div id="event-log-container">
+          <h3>Event Log</h3>
+          <div id="event-log"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: GOLEMS -->
+      <div id="panel-golems" class="panel">
+        <h2 class="panel-title">[ Golems ]</h2>
+        <div id="golems-list"></div>
+        <div class="section" id="alchemy-section">
+          <h3>Alchemy Lab</h3>
+          <div id="alchemy-display"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM: PRESTIGE / INFO -->
+    <footer id="footer-bar">
+      <span id="footer-time"></span>
+      <span id="footer-prestige"></span>
+    </footer>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
