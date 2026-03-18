@@ -229,7 +229,7 @@ function tickGolems(now) {
       log(`✅ ${golem.name} returned: ${summary.join(" ")}`, "good");
       golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null; golem.collected = {};
       updateGolemCardState(golem);
-      renderResources(); renderRecipes(); stateChanged = true;
+      renderResources(); renderRecipes(); renderAlchemy(); stateChanged = true;
     }
   }
   return stateChanged;
