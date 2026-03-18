@@ -21,44 +21,61 @@ const RESOURCES = {
 };
 
 // maxSlots = max golems that can work this zone simultaneously
+// Forest yields clay+herbs+crystals so player can bootstrap from scratch
 const ZONES = [
-  { id: "forest",  name: "Whispering Forest", icon: "🌲", ascii: "forest",  yields: ["herbs","crystals"],    danger: 0, maxSlots: 3 },
-  { id: "mine",    name: "Iron Depths",        icon: "⛏️",  ascii: "mine",   yields: ["iron","crystals"],     danger: 1, maxSlots: 3 },
-  { id: "swamp",   name: "Sulfur Swamp",       icon: "🌫️",  ascii: "swamp",  yields: ["sulfur","herbs"],      danger: 1, maxSlots: 2 },
-  { id: "ruins",   name: "Ancient Ruins",      icon: "🏛️",  ascii: "ruins",  yields: ["moonstone","essence"], danger: 2, maxSlots: 2 },
-  { id: "volcano", name: "Ember Volcano",      icon: "🌋",  ascii: "volcano",yields: ["sulfur","moonstone"],  danger: 3, maxSlots: 1 },
+  { id: "forest",  name: "Whispering Forest", icon: "🌲", ascii: "forest",  yields: ["clay","herbs","crystals"], danger: 0, maxSlots: 3 },
+  { id: "mine",    name: "Iron Depths",        icon: "⛏️",  ascii: "mine",   yields: ["iron","crystals"],         danger: 1, maxSlots: 3 },
+  { id: "swamp",   name: "Sulfur Swamp",       icon: "🌫️",  ascii: "swamp",  yields: ["sulfur","herbs"],          danger: 1, maxSlots: 2 },
+  { id: "ruins",   name: "Ancient Ruins",      icon: "🏛️",  ascii: "ruins",  yields: ["moonstone","essence"],     danger: 2, maxSlots: 2 },
+  { id: "volcano", name: "Ember Volcano",      icon: "🌋",  ascii: "volcano",yields: ["sulfur","moonstone"],      danger: 3, maxSlots: 1 },
 ];
 
 const GOLEM_TYPES = {
-  clay:    { name: "Clay Golem",    tier: 1, ascii: " (o_o) \n [___] \n  | | ", speed: 8,  capacity: 3,  danger_resist: 0, cost: { clay: 5, essence: 2 },                       unlock: 0 },
-  iron:    { name: "Iron Golem",    tier: 2, ascii: " [O.O] \n |[_]| \n  | | ", speed: 6,  capacity: 6,  danger_resist: 1, cost: { iron: 8, essence: 5, crystals: 3 },           unlock: 1 },
-  crystal: { name: "Crystal Golem", tier: 3, ascii: " <*.*> \n |<_>| \n  | | ", speed: 4,  capacity: 10, danger_resist: 2, cost: { crystals: 12, moonstone: 4, essence: 10 },    unlock: 2 },
-  moon:    { name: "Moon Golem",    tier: 4, ascii: " (^v^) \n {___} \n  | | ", speed: 3,  capacity: 15, danger_resist: 3, cost: { moonstone: 10, essence: 20, crystals: 8 },    unlock: 3 },
+  // Tier 1 — only needs clay+herbs (both from forest)
+  clay:    { name: "Clay Golem",    tier: 1, ascii: " (o_o) \n [___] \n  | | ", speed: 8,  capacity: 4,  danger_resist: 0, cost: { clay: 5, herbs: 3 },                         unlock: 0 },
+  // Tier 2 — needs iron (mine) + crystals (forest or mine) + gold (alchemy)
+  iron:    { name: "Iron Golem",    tier: 2, ascii: " [O.O] \n |[_]| \n  | | ", speed: 6,  capacity: 7,  danger_resist: 1, cost: { iron: 6, crystals: 4, gold: 30 },             unlock: 1 },
+  // Tier 3 — needs crystals + essence (from alchemy)
+  crystal: { name: "Crystal Golem", tier: 3, ascii: " <*.*> \n |<_>| \n  | | ", speed: 4,  capacity: 12, danger_resist: 2, cost: { crystals: 10, essence: 8, gold: 80 },         unlock: 2 },
+  // Tier 4 — needs moonstone + essence
+  moon:    { name: "Moon Golem",    tier: 4, ascii: " (^v^) \n {___} \n  | | ", speed: 3,  capacity: 18, danger_resist: 3, cost: { moonstone: 8, essence: 15, gold: 200 },        unlock: 3 },
 };
 
 const ALCHEMY_RECIPES = [
-  { id: "healing_potion",    name: "Healing Potion",    icon: "🧪", ingredients: { herbs: 3, crystals: 1 },                   produces: { gold: 15 },           time: 5,  unlocked: true,  requiresLevel: 0 },
-  { id: "mana_elixir",       name: "Mana Elixir",       icon: "💜", ingredients: { crystals: 3, moonstone: 1 },               produces: { gold: 30, essence: 2 },time: 8,  unlocked: true,  requiresLevel: 0 },
-  { id: "golem_oil",         name: "Golem Oil",         icon: "⚗️", ingredients: { herbs: 2, sulfur: 2, iron: 1 },            produces: { essence: 5 },         time: 10, unlocked: true,  requiresLevel: 0 },
-  { id: "philosophers_draft",name: "Philosopher's Draft",icon:"🌟", ingredients: { moonstone: 3, essence: 5, sulfur: 2 },     produces: { gold: 100, essence: 10},time: 20, unlocked: false, requiresLevel: 2 },
-  { id: "soul_crystal",      name: "Soul Crystal",      icon: "🔮", ingredients: { crystals: 8, moonstone: 5, essence: 15 },  produces: { essence: 30, gold: 50},time: 30, unlocked: false, requiresLevel: 3 },
+  // Tier 0 — available from start, uses forest resources only
+  { id: "herb_tonic",        name: "Herb Tonic",        icon: "🌿", ingredients: { herbs: 4 },                               produces: { gold: 8 },             time: 4,  unlocked: true,  requiresLevel: 0 },
+  { id: "crystal_dust",      name: "Crystal Dust",      icon: "✨", ingredients: { crystals: 2, herbs: 2 },                  produces: { essence: 3 },          time: 6,  unlocked: true,  requiresLevel: 0 },
+  { id: "healing_potion",    name: "Healing Potion",    icon: "🧪", ingredients: { herbs: 3, crystals: 2 },                  produces: { gold: 20 },            time: 8,  unlocked: true,  requiresLevel: 0 },
+  // Tier 1 — needs iron/sulfur from mine/swamp
+  { id: "golem_oil",         name: "Golem Oil",         icon: "⚗️", ingredients: { herbs: 3, iron: 2 },                      produces: { essence: 6, gold: 10 }, time: 10, unlocked: false, requiresLevel: 1 },
+  { id: "mana_elixir",       name: "Mana Elixir",       icon: "💜", ingredients: { crystals: 4, sulfur: 2 },                 produces: { gold: 35, essence: 4 }, time: 12, unlocked: false, requiresLevel: 1 },
+  // Tier 2 — advanced
+  { id: "philosophers_draft",name: "Philosopher's Draft",icon:"🌟", ingredients: { moonstone: 3, essence: 6, herbs: 4 },     produces: { gold: 120, essence: 12},time: 20, unlocked: false, requiresLevel: 2 },
+  // Tier 3 — endgame
+  { id: "soul_crystal",      name: "Soul Crystal",      icon: "🔮", ingredients: { crystals: 8, moonstone: 5, essence: 15 }, produces: { essence: 35, gold: 60}, time: 30, unlocked: false, requiresLevel: 3 },
 ];
 
 const UPGRADES = [
-  { id: "better_furnace",   name: "Better Furnace",    desc: "Alchemy recipes complete 25% faster.",          cost: { gold: 50, iron: 5 },                        effect: () => { G.alchemySpeedMult *= 0.75; },      purchased: false, requiresLevel: 0 },
-  { id: "golem_beacon",     name: "Golem Beacon",      desc: "All golems gather +1 extra resource per trip.", cost: { gold: 80, crystals: 5, essence: 5 },         effect: () => { G.golemBonusCapacity += 1; },       purchased: false, requiresLevel: 1 },
-  { id: "arcane_compass",   name: "Arcane Compass",    desc: "Golems travel 20% faster.",                     cost: { gold: 120, moonstone: 3, essence: 10 },      effect: () => { G.golemSpeedMult *= 0.80; },        purchased: false, requiresLevel: 1 },
-  { id: "essence_condenser",name: "Essence Condenser", desc: "Alchemy produces +50% more essence.",           cost: { gold: 200, crystals: 10, moonstone: 5 },     effect: () => { G.essenceMult = (G.essenceMult||1)*1.5; }, purchased: false, requiresLevel: 2 },
-  { id: "master_blueprint", name: "Master Blueprint",  desc: "Golem crafting costs reduced by 25%.",          cost: { gold: 300, essence: 20, moonstone: 8 },      effect: () => { G.craftCostMult *= 0.75; },         purchased: false, requiresLevel: 2 },
-  { id: "zone_expansion",   name: "Zone Expansion",    desc: "+1 slot in every zone.",                        cost: { gold: 400, moonstone: 10, essence: 20 },     effect: () => { ZONES.forEach(z => z.maxSlots++); }, purchased: false, requiresLevel: 2 },
-  { id: "lunar_attunement", name: "Lunar Attunement",  desc: "Moon Golems gather from all zones simultaneously.", cost: { gold: 500, moonstone: 15, essence: 30 }, effect: () => { G.lunarAttunement = true; },        purchased: false, requiresLevel: 3 },
+  // Level 0 upgrades — purchasable with gold+forest resources
+  { id: "better_furnace",   name: "Better Furnace",    desc: "Alchemy recipes complete 25% faster.",          cost: { gold: 40, crystals: 5 },                    effect: () => { G.alchemySpeedMult *= 0.75; },      purchased: false, requiresLevel: 0 },
+  { id: "forest_knowledge", name: "Forest Knowledge",  desc: "Forest golems carry +2 extra resources.",       cost: { gold: 30, herbs: 10 },                       effect: () => { G.golemBonusCapacity += 2; },       purchased: false, requiresLevel: 0 },
+  // Level 1 upgrades
+  { id: "golem_beacon",     name: "Golem Beacon",      desc: "All golems carry +2 extra resources.",          cost: { gold: 80, crystals: 6, essence: 5 },         effect: () => { G.golemBonusCapacity += 2; },       purchased: false, requiresLevel: 1 },
+  { id: "arcane_compass",   name: "Arcane Compass",    desc: "Golems travel 20% faster.",                     cost: { gold: 100, crystals: 4, essence: 8 },        effect: () => { G.golemSpeedMult *= 0.80; },        purchased: false, requiresLevel: 1 },
+  // Level 2 upgrades
+  { id: "essence_condenser",name: "Essence Condenser", desc: "Alchemy produces +50% more essence.",           cost: { gold: 180, crystals: 8, essence: 10 },       effect: () => { G.essenceMult = (G.essenceMult||1)*1.5; }, purchased: false, requiresLevel: 2 },
+  { id: "master_blueprint", name: "Master Blueprint",  desc: "Golem crafting costs reduced by 25%.",          cost: { gold: 250, essence: 15, moonstone: 4 },      effect: () => { G.craftCostMult *= 0.75; },         purchased: false, requiresLevel: 2 },
+  { id: "zone_expansion",   name: "Zone Expansion",    desc: "+1 slot in every zone.",                        cost: { gold: 350, essence: 15, moonstone: 6 },      effect: () => { ZONES.forEach(z => z.maxSlots++); }, purchased: false, requiresLevel: 2 },
+  // Level 3 upgrades
+  { id: "lunar_attunement", name: "Lunar Attunement",  desc: "Moon Golems gather from all zones simultaneously.", cost: { gold: 500, moonstone: 12, essence: 25 }, effect: () => { G.lunarAttunement = true; },        purchased: false, requiresLevel: 3 },
 ];
 
 const WORKSHOP_LEVELS = [
   { level: 0, name: "Novice Lab",     maxGolems: 3,  cost: null },
-  { level: 1, name: "Journeyman Lab", maxGolems: 6,  cost: { gold: 100, iron: 10 } },
-  { level: 2, name: "Adept Lab",      maxGolems: 12, cost: { gold: 250, crystals: 8, essence: 10 } },
-  { level: 3, name: "Master Lab",     maxGolems: 25, cost: { gold: 600, moonstone: 6, essence: 25 } },
+  // Level 1 — achievable with gold from herb tonics + crystals from forest
+  { level: 1, name: "Journeyman Lab", maxGolems: 6,  cost: { gold: 60, crystals: 8 } },
+  { level: 2, name: "Adept Lab",      maxGolems: 12, cost: { gold: 200, essence: 10, iron: 6 } },
+  { level: 3, name: "Master Lab",     maxGolems: 25, cost: { gold: 500, moonstone: 5, essence: 20 } },
 ];
 
 const ASCII_MAPS = {
@@ -75,7 +92,8 @@ const ASCII_MAPS = {
 // ─────────────────────────────────────────────────────
 
 const G = {
-  resources: { gold: 10, essence: 5, herbs: 0, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 10 },
+  // Starting resources: enough clay+herbs to craft 1st golem immediately
+  resources: { gold: 5, essence: 0, herbs: 5, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 8 },
   golems: [],
   nextGolemId: 1,
   workshopLevel: 0,
@@ -749,6 +767,7 @@ function setupEventDelegation() {
     } else if (action === 'brew')           { startAlchemy(btn.dataset.recipe);
     } else if (action === 'upgrade-workshop'){ upgradeWorkshop();
     } else if (action === 'buy-upgrade')    { buyUpgrade(btn.dataset.upgrade);
+    } else if (action === 'reset-game')     { resetGame();
     }
   });
 }
