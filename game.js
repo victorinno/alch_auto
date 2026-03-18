@@ -70,6 +70,17 @@ const UPGRADES = [
   { id: "lunar_attunement", name: "Lunar Attunement",  desc: "Moon Golems gather from all zones simultaneously.", cost: { gold: 500, moonstone: 12, essence: 25 }, effect: () => { G.lunarAttunement = true; },        purchased: false, requiresLevel: 3 },
 ];
 
+// Upgrades that can be applied to individual golems
+// Each golem tracks which upgrades it has purchased in golem.upgrades = []
+const GOLEM_UPGRADES = [
+  // Tier 0 — available for all golems, forest resources only
+  { id: "reinforced_shell",  name: "Reinforced Shell",  icon: "🛡️",  desc: "+1 Danger Resist (access Mine & Swamp)",  cost: { clay: 8, crystals: 4 },        effect: g => { g.danger_resist = (g.danger_resist||0) + 1; }, maxLevel: 1, requiresTier: 1 },
+  { id: "iron_plating",      name: "Iron Plating",      icon: "⚙️",  desc: "+1 Danger Resist (access Ruins)",         cost: { iron: 6, gold: 40 },            effect: g => { g.danger_resist = (g.danger_resist||0) + 1; }, maxLevel: 1, requiresTier: 1 },
+  { id: "arcane_plating",    name: "Arcane Plating",    icon: "✨",  desc: "+1 Danger Resist (access Volcano)",      cost: { crystals: 8, essence: 6 },      effect: g => { g.danger_resist = (g.danger_resist||0) + 1; }, maxLevel: 1, requiresTier: 1 },
+  { id: "satchel",           name: "Satchel",           icon: "🎒",  desc: "+3 Carry Capacity",                     cost: { herbs: 8, gold: 20 },           effect: g => { g.bonus_capacity = (g.bonus_capacity||0) + 3; }, maxLevel: 3, requiresTier: 1 },
+  { id: "swift_legs",        name: "Swift Legs",        icon: "💨",  desc: "20% faster travel",                    cost: { crystals: 5, gold: 30 },        effect: g => { g.speed_mult = (g.speed_mult||1) * 0.8; },    maxLevel: 2, requiresTier: 1 },
+];
+
 const WORKSHOP_LEVELS = [
   { level: 0, name: "Novice Lab",     maxGolems: 3,  cost: null },
   // Level 1 — achievable with gold from herb tonics + crystals from forest
@@ -175,7 +186,11 @@ function craftGolem(typeId) {
   spend(def.cost, G.craftCostMult);
   const golem = {
     id: G.nextGolemId++, typeId, name: `${def.name} #${G.nextGolemId-1}`,
-    state: "idle", zoneId: null, tripStart: null, tripEnd: null, tripPhase: null, collected: {}
+    state: "idle", zoneId: null, tripStart: null, tripEnd: null, tripPhase: null, collected: {},
+    upgrades: [],          // list of upgrade ids purchased for this golem
+    danger_resist: def.danger_resist,  // starts at base type value, can be increased
+    bonus_capacity: 0,     // extra carry slots from upgrades
+    speed_mult: 1.0        // travel speed multiplier from upgrades
   };
   G.golems.push(golem);
   log(`✨ Crafted ${golem.name}!`, "great");
@@ -192,9 +207,9 @@ function assignGolemToZone(golemId, zoneId) {
   if (!golem || !zone) return;
   if (golem.state !== "idle") { log(`${golem.name} is busy!`, "warn"); return; }
   const def = GOLEM_TYPES[golem.typeId];
-  if (zone.danger > def.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}! Too dangerous.`, "warn"); return; }
+  if (zone.danger > golem.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}! Needs Danger Resist ${zone.danger} (has ${golem.danger_resist}). Upgrade it first!`, "warn"); return; }
   if (golemsInZone(zoneId).length >= zone.maxSlots) { log(`${zone.name} is full! (${zone.maxSlots} slots)`, "warn"); return; }
-  const speed = def.speed * G.golemSpeedMult;
+  const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
   golem.state = "traveling"; golem.zoneId = zoneId; golem.tripPhase = "out";
   golem.tripStart = Date.now(); golem.tripEnd = Date.now() + speed * 1000; golem.collected = {};
   log(`🚶 ${golem.name} → ${zone.name}`, "info");
@@ -212,6 +227,27 @@ function recallGolem(golemId) {
   renderZones();
   renderGolemRoster();
   renderMap(null);
+}
+
+function upgradeGolem(golemId, upgradeId) {
+  const golem = G.golems.find(g => g.id == golemId);
+  if (!golem) return;
+  if (golem.state !== "idle") { log(`Recall ${golem.name} before upgrading!`, "warn"); return; }
+  const upg = GOLEM_UPGRADES.find(u => u.id === upgradeId);
+  if (!upg) return;
+  const def = GOLEM_TYPES[golem.typeId];
+  if (def.tier < upg.requiresTier) { log(`${golem.name} tier too low for this upgrade.`, "warn"); return; }
+  // Count how many times this upgrade was already applied
+  const timesApplied = golem.upgrades.filter(u => u === upgradeId).length;
+  if (timesApplied >= upg.maxLevel) { log(`${golem.name} already has max level of ${upg.name}.`, "warn"); return; }
+  if (!canAfford(upg.cost)) { log(`Not enough resources for ${upg.name}.`, "warn"); return; }
+  spend(upg.cost);
+  upg.effect(golem);
+  golem.upgrades.push(upgradeId);
+  log(`⬆️ ${golem.name} upgraded: ${upg.name}! (Danger Resist: ${golem.danger_resist})`, "great");
+  renderGolemRoster();
+  renderResources();
+  renderZones();
 }
 
 function destroyGolem(golemId) {
@@ -238,7 +274,7 @@ function tickGolems(now) {
     if (golem.state === "idle") continue;
     const def  = GOLEM_TYPES[golem.typeId];
     const zone = ZONES.find(z => z.id === golem.zoneId);
-    const speed = def.speed * G.golemSpeedMult;
+    const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
 
     if (golem.state === "traveling" && golem.tripPhase === "out" && now >= golem.tripEnd) {
       golem.state = "gathering"; golem.tripStart = now; golem.tripEnd = now + 3000;
@@ -246,7 +282,7 @@ function tickGolems(now) {
       updateZoneGolemRow(golem); stateChanged = true;
 
     } else if (golem.state === "gathering" && now >= golem.tripEnd) {
-      const capacity = def.capacity + G.golemBonusCapacity;
+      const capacity = def.capacity + (golem.bonus_capacity || 0) + G.golemBonusCapacity;
       golem.collected = {};
       let remaining = capacity;
       const yields = [...zone.yields];
@@ -441,7 +477,6 @@ function updateZoneGolemRow(golem) {
 function renderGolemRoster() {
   const el = document.getElementById("golem-roster");
   if (!el) return;
-  const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
   if (G.golems.length === 0) {
     el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;padding:4px;">No golems yet. Craft one below!</div>`;
     return;
@@ -451,16 +486,54 @@ function renderGolemRoster() {
     const zone = ZONES.find(z => z.id === golem.zoneId);
     const statusColor = golem.state === "idle" ? "var(--amber)" : "var(--green)";
     const statusText  = golem.state === "idle" ? "Idle" : `→ ${zone?.name || "?"}`;
-    return `<div class="roster-row" id="roster-${golem.id}">
-      <span class="roster-name">${golem.name}</span>
-      <span class="roster-tier" style="color:var(--text-dim)">T${def.tier}</span>
-      <span class="roster-status" id="rstatus-${golem.id}" style="color:${statusColor}">${statusText}</span>
-      ${golem.state === "idle"
-        ? `<button class="btn-sm" data-action="destroy-golem" data-golem="${golem.id}"
-             style="color:var(--red);margin-left:4px;">✕</button>`
-        : `<button class="btn-sm" data-action="recall-zone" data-golem="${golem.id}"
-             style="color:var(--amber);margin-left:4px;">↩</button>`
-      }
+    const isIdle = golem.state === "idle";
+
+    // Danger resist badge
+    const drColor = golem.danger_resist === 0 ? "var(--red)" : golem.danger_resist === 1 ? "var(--amber)" : "var(--green)";
+    const drBadge = `<span style="font-size:10px;color:${drColor};margin-left:4px;">DR:${golem.danger_resist}</span>`;
+
+    // Upgrades section (only shown when idle)
+    let upgradesHtml = "";
+    if (isIdle) {
+      upgradesHtml = `<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border);">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px;">⬆ Upgrades:</div>`;
+      upgradesHtml += GOLEM_UPGRADES.map(upg => {
+        const timesApplied = golem.upgrades.filter(u => u === upg.id).length;
+        const maxed = timesApplied >= upg.maxLevel;
+        const affordable = canAfford(upg.cost);
+        const costStr = Object.entries(upg.cost).map(([r,a]) => {
+          const have = G.resources[r] || 0;
+          const color = have >= a ? "var(--green)" : "var(--red)";
+          return `<span style="color:${color}">${a}${RESOURCES[r].icon}</span>`;
+        }).join(" ");
+        const levelStr = upg.maxLevel > 1 ? ` (${timesApplied}/${upg.maxLevel})` : "";
+        return `<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;font-size:10px;">
+          <span style="flex:1;color:${maxed?'var(--text-dim)':'var(--text)'};">${upg.icon} ${upg.name}${levelStr}</span>
+          <span style="color:var(--text-dim);">${upg.desc}</span>
+          <span>${costStr}</span>
+          <button class="btn-sm" data-action="upgrade-golem" data-golem="${golem.id}" data-upgrade="${upg.id}"
+            style="padding:1px 6px;font-size:10px;" ${(maxed || !affordable) ? "disabled" : ""}>
+            ${maxed ? "Max" : "Buy"}
+          </button>
+        </div>`;
+      }).join("");
+      upgradesHtml += `</div>`;
+    }
+
+    return `<div style="border:1px solid var(--border);padding:5px 7px;margin-bottom:5px;background:var(--bg3);">
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:11px;color:var(--amber);flex:1;">${golem.name}</span>
+        <span style="font-size:10px;color:var(--text-dim);">T${def.tier}</span>
+        ${drBadge}
+        <span style="font-size:10px;color:${statusColor};">${statusText}</span>
+        ${isIdle
+          ? `<button class="btn-sm" data-action="destroy-golem" data-golem="${golem.id}"
+               style="color:var(--red);padding:1px 5px;font-size:10px;">✕</button>`
+          : `<button class="btn-sm" data-action="recall-zone" data-golem="${golem.id}"
+               style="color:var(--amber);padding:1px 5px;font-size:10px;">↩</button>`
+        }
+      </div>
+      ${upgradesHtml}
     </div>`;
   }).join("");
 }
@@ -759,7 +832,13 @@ function loadGame() {
     if (!raw) return;
     const save = JSON.parse(raw);
     Object.assign(G.resources, save.resources||{});
-    G.golems           = save.golems||[];
+    G.golems           = (save.golems||[]).map(g => ({
+      ...g,
+      upgrades: g.upgrades || [],
+      danger_resist: g.danger_resist !== undefined ? g.danger_resist : (GOLEM_TYPES[g.typeId]?.danger_resist || 0),
+      bonus_capacity: g.bonus_capacity || 0,
+      speed_mult: g.speed_mult || 1.0
+    }));
     G.nextGolemId      = save.nextGolemId||1;
     G.workshopLevel    = save.workshopLevel||0;
     G.alchemyQueue     = save.alchemyQueue||[];
@@ -870,6 +949,7 @@ function setupEventDelegation() {
     } else if (action === 'confirm-reset')   { confirmReset();
     } else if (action === 'cancel-reset')    { cancelReset();
     } else if (action === 'alchemist-gather'){ alchemistGather(btn.dataset.zone);
+    } else if (action === 'upgrade-golem')    { upgradeGolem(btn.dataset.golem, btn.dataset.upgrade);
     }
   });
 }
