@@ -487,6 +487,9 @@ function tickProgressBars(now) {
     }
   }
 
+  // Refresh alchemist cooldown buttons every second
+  renderAlchemistActions();
+
   // Alchemy progress bars
   for (const job of G.alchemyQueue) {
     const pct = Math.min(100, ((now - job.startTime) / (job.endTime - job.startTime)) * 100);
@@ -631,6 +634,83 @@ function renderAll() {
   renderFooter();
   renderGolemRoster();
   renderZones();
+  renderAlchemistActions();
+}
+
+// ─────────────────────────────────────────────────────
+// ALCHEMIST MANUAL GATHER
+// ─────────────────────────────────────────────────────
+
+// The alchemist can personally gather from any zone (no golem needed)
+// Uses a cooldown per zone to prevent spam
+const ALCHEMIST_COOLDOWNS = {};
+const ALCHEMIST_GATHER_COOLDOWN = 8000; // 8 seconds per zone
+
+function alchemistGather(zoneId) {
+  const zone = ZONES.find(z => z.id === zoneId);
+  if (!zone) return;
+  const now = Date.now();
+  const last = ALCHEMIST_COOLDOWNS[zoneId] || 0;
+  if (now - last < ALCHEMIST_GATHER_COOLDOWN) {
+    const remaining = Math.ceil((ALCHEMIST_GATHER_COOLDOWN - (now - last)) / 1000);
+    log(`⏳ You need to rest ${remaining}s before gathering from ${zone.name} again.`, "warn");
+    return;
+  }
+  // Alchemist gathers 1-3 random resources from zone (small amount)
+  const yields = [...zone.yields];
+  const collected = {};
+  let amount = Math.floor(Math.random() * 2) + 1; // 1-2 items
+  for (let i = 0; i < amount; i++) {
+    const res = randomFrom(yields);
+    collected[res] = (collected[res] || 0) + 1;
+  }
+  for (const [res, amt] of Object.entries(collected)) {
+    G.resources[res] = (G.resources[res] || 0) + amt;
+  }
+  ALCHEMIST_COOLDOWNS[zoneId] = now;
+  const summary = Object.entries(collected).map(([r,a]) => `${a}x ${RESOURCES[r].icon}`).join(" ");
+  log(`🧙 You gathered: ${summary} from ${zone.name}.`, "good");
+  renderResources();
+  renderRecipes();
+  renderZones(); // refresh cooldown buttons
+}
+
+function renderAlchemistActions() {
+  const el = document.getElementById("alchemist-actions");
+  if (!el) return;
+  const now = Date.now();
+  el.innerHTML = ZONES.map(zone => {
+    const last = ALCHEMIST_COOLDOWNS[zone.id] || 0;
+    const elapsed = now - last;
+    const onCooldown = elapsed < ALCHEMIST_GATHER_COOLDOWN;
+    const remaining = onCooldown ? Math.ceil((ALCHEMIST_GATHER_COOLDOWN - elapsed) / 1000) : 0;
+    const yieldsStr = zone.yields.map(r => RESOURCES[r].icon).join(" ");
+    return `<button class="btn" data-action="alchemist-gather" data-zone="${zone.id}"
+      style="margin-bottom:4px;width:100%;text-align:left;${onCooldown ? 'opacity:0.5;' : ''}"
+      ${onCooldown ? 'disabled' : ''}>
+      ${zone.icon} ${zone.name} — ${yieldsStr}
+      ${onCooldown ? `<span style="color:var(--text-dim);font-size:10px;"> (${remaining}s)</span>` : ''}
+    </button>`;
+  }).join("");
+}
+
+// ─────────────────────────────────────────────────────
+// RESET GAME
+// ─────────────────────────────────────────────────────
+
+function resetGame() {
+  const modal = document.getElementById('reset-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function confirmReset() {
+  localStorage.removeItem("alch_auto_save");
+  location.reload();
+}
+
+function cancelReset() {
+  const modal = document.getElementById('reset-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 // ─────────────────────────────────────────────────────
@@ -768,6 +848,9 @@ function setupEventDelegation() {
     } else if (action === 'upgrade-workshop'){ upgradeWorkshop();
     } else if (action === 'buy-upgrade')    { buyUpgrade(btn.dataset.upgrade);
     } else if (action === 'reset-game')     { resetGame();
+    } else if (action === 'confirm-reset')   { confirmReset();
+    } else if (action === 'cancel-reset')    { cancelReset();
+    } else if (action === 'alchemist-gather'){ alchemistGather(btn.dataset.zone);
     }
   });
 }
