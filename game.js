@@ -375,10 +375,10 @@ function craftGolem(typeId) {
 }
 
 function sendGolem(golemId, zoneId) {
-  const golem = G.golems.find(g => g.id === golemId);
+  const golem = G.golems.find(g => g.id == golemId);
   const zone  = ZONES.find(z => z.id === zoneId);
-  const def   = GOLEM_TYPES[golem.typeId];
   if (!golem || !zone || golem.state !== "idle") return;
+  const def   = GOLEM_TYPES[golem.typeId];
 
   if (zone.danger > def.danger_resist) {
     log(`⚠️ ${golem.name} cannot handle the danger at ${zone.name}!`, "warn");
@@ -399,7 +399,7 @@ function sendGolem(golemId, zoneId) {
 }
 
 function recallGolem(golemId) {
-  const golem = G.golems.find(g => g.id === golemId);
+  const golem = G.golems.find(g => g.id == golemId);
   if (!golem || golem.state === "idle") return;
   golem.state     = "idle";
   golem.zoneId    = null;
@@ -411,7 +411,7 @@ function recallGolem(golemId) {
 }
 
 function destroyGolem(golemId) {
-  const idx = G.golems.findIndex(g => g.id === golemId);
+  const idx = G.golems.findIndex(g => g.id == golemId);
   if (idx === -1) return;
   const golem = G.golems[idx];
   // refund 50% clay/iron
@@ -642,10 +642,12 @@ function renderGolems() {
 
     const zoneButtons = ZONES.map(z => {
       const canGo = def.danger_resist >= z.danger;
+      const titleText = canGo ? z.name : 'Too dangerous!';
       return `<button class="btn-sm" onclick="sendGolem(${golem.id},'${z.id}')"
-        ${(!isIdle || !canGo) ? "disabled" : ""}
-        title="${canGo ? z.name : "Too dangerous!"}">
-        ${z.icon}${canGo ? "" : "🚫"}
+        ${(!isIdle || !canGo) ? 'disabled' : ''}
+        title="${titleText}"
+        style="font-size:11px;padding:2px 5px;">
+        ${z.icon}
       </button>`;
     }).join("");
 
