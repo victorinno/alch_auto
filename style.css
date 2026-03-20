@@ -422,6 +422,89 @@ header {
 }
 
 .glow { animation: glow-pulse 2s infinite; }
+
+/* ── WORLD MAP ────────────────────────────────────────── */
+#worldmap-panel {
+  grid-column: 1 / -1;
+  padding: 20px;
+  background: var(--bg2);
+  min-height: 600px;
+}
+
+.worldmap-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.worldmap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  max-width: 900px;
+  margin: 20px auto;
+}
+
+.worldmap-tile {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 20px;
+  text-align: center;
+  border-radius: 4px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.worldmap-tile.clickable {
+  cursor: pointer;
+}
+
+.worldmap-tile.clickable:hover {
+  border-color: var(--green);
+  background: var(--bg2);
+  transform: translateY(-2px);
+}
+
+.worldmap-tile.fogged {
+  opacity: 0.6;
+}
+
+.worldmap-tile.revealed {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.tile-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.tile-name {
+  color: var(--amber);
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.tile-resources {
+  color: var(--green);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.tile-countdown {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin: 2px 0;
+}
+
 /* ── RESPONSIVE ───────────────────────────────────────── */
 @media (max-width: 900px) {
   #main-layout {

@@ -48,6 +48,15 @@
       <div id="panel-world" class="panel">
         <h2 class="panel-title">[ World ]</h2>
         <div id="ascii-map"></div>
+
+        <!-- World Features Section -->
+        <div class="panel-section" style="margin:16px 0;padding:12px;border:1px solid var(--border);background:var(--bg3);">
+          <h3 style="margin:0 0 8px;color:var(--amber);font-size:14px;">🌍 World Features</h3>
+          <button class="btn" data-action="show-worldmap" style="width:100%;color:var(--green);">
+            🗺️ World Map
+          </button>
+        </div>
+
         <div id="event-log-container">
           <h3>Event Log</h3>
           <div id="event-log"></div>
@@ -99,6 +108,9 @@
       </div>
 
     </div>
+
+    <!-- WORLD MAP PANEL (hidden by default) -->
+    <div id="worldmap-panel" style="display:none;"></div>
 
     <!-- FOOTER -->
     <footer id="footer-bar">

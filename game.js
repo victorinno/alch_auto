@@ -57,6 +57,72 @@ function fmtResources(num) {
   return num.toString();
 }
 
+// ─────────────────────────────────────────────────────
+// WORLD MAP INITIALIZATION
+// ─────────────────────────────────────────────────────
+
+function initializeWorldMap() {
+  const tiles = [];
+  const zoneTypes = ["forest", "mine", "swamp", "ruins", "volcano"];
+
+  // Shuffle zone types
+  const shuffled = [...zoneTypes].sort(() => Math.random() - 0.5);
+
+  // Define positions: cross (4) + 1 random diagonal
+  const crossPositions = [[0,1], [1,0], [1,2], [2,1]];
+  const diagonalPositions = [[0,0], [0,2], [2,0], [2,2]];
+  const randomDiagonal = diagonalPositions[Math.floor(Math.random() * diagonalPositions.length)];
+  const discoveredPositions = [...crossPositions, randomDiagonal];
+
+  // Assign shuffled zones to discovered positions
+  let zoneIndex = 0;
+
+  for (let row = 0; row < 3; row++) {
+    tiles[row] = [];
+    for (let col = 0; col < 3; col++) {
+      const distance = Math.round(Math.sqrt((row-1)**2 + (col-1)**2) * 10) / 10;
+
+      // Workshop tile (center)
+      if (row === 1 && col === 1) {
+        tiles[row][col] = {
+          explored: true,
+          zoneType: "workshop",
+          resourcePool: null,
+          position: [row, col],
+          distance: 0
+        };
+      }
+      // Discovered zone tiles
+      else if (discoveredPositions.some(p => p[0] === row && p[1] === col)) {
+        const zoneType = shuffled[zoneIndex++];
+        const zone = ZONES.find(z => z.id === zoneType);
+        const basePool = zone.resourcePool ? zone.resourcePool.total : 100000;
+        const scaledTotal = Math.floor(basePool * (1 + distance * 0.5));
+
+        tiles[row][col] = {
+          explored: true,
+          zoneType: zoneType,
+          resourcePool: { total: scaledTotal, byType: {} },
+          position: [row, col],
+          distance: distance
+        };
+      }
+      // Fogged tiles
+      else {
+        tiles[row][col] = {
+          explored: false,
+          zoneType: null,
+          resourcePool: null,
+          position: [row, col],
+          distance: distance
+        };
+      }
+    }
+  }
+
+  G.worldMap = { tiles };
+}
+
 const GOLEM_TYPES = {
   // Tier 1 — only needs clay+herbs (both from forest)
   clay:    { name: "Clay Golem",    tier: 1, ascii: " (o_o) \n [___] \n  | | ", speed: 8,  capacity: 4,  danger_resist: 0, cost: { clay: 5, herbs: 3 },                         unlock: 0 },
@@ -146,6 +212,13 @@ const G = {
   prestigeCount: 0,
   eventLog: [],
   lastSave: Date.now(),
+
+  // World Map State
+  worldMap: null,               // Initialized on first load
+  alchemistState: "idle",       // "idle" | "exploring" | "returning"
+  explorationTarget: null,      // { row, col } or null
+  explorationEndTime: null,     // timestamp or null
+  currentView: "workshop",      // "workshop" | "worldmap"
 };
 
 // ─────────────────────────────────────────────────────
@@ -197,6 +270,145 @@ function idleGolems() {
 
 function golemsInZone(zoneId) {
   return G.golems.filter(g => g.zoneId === zoneId && g.state !== "idle");
+}
+
+// ─────────────────────────────────────────────────────
+// WORLD MAP EXPLORATION
+// ─────────────────────────────────────────────────────
+
+function getDirectionLabel(row, col) {
+  if (row === 0 && col === 1) return "north";
+  if (row === 1 && col === 0) return "west";
+  if (row === 1 && col === 2) return "east";
+  if (row === 2 && col === 1) return "south";
+  if (row === 0 && col === 0) return "northwest corner";
+  if (row === 0 && col === 2) return "northeast corner";
+  if (row === 2 && col === 0) return "southwest corner";
+  if (row === 2 && col === 2) return "southeast corner";
+  return "unknown";
+}
+
+function startExploration(row, col) {
+  // Check if alchemist is busy
+  if (G.alchemistState !== "idle") {
+    log("Already exploring or returning!", "warn");
+    return;
+  }
+
+  // Check if map initialized
+  if (!G.worldMap || !G.worldMap.tiles[row] || !G.worldMap.tiles[row][col]) {
+    log("Invalid tile position!", "warn");
+    return;
+  }
+
+  const tile = G.worldMap.tiles[row][col];
+
+  // Check if tile is already explored
+  if (tile.explored) {
+    log("This area has already been explored!", "warn");
+    return;
+  }
+
+  // Calculate exploration time based on distance
+  const explorationTime = Math.ceil(tile.distance * 10) * 1000; // milliseconds
+
+  // Set exploration state
+  G.alchemistState = "exploring";
+  G.explorationTarget = { row, col };
+  G.explorationEndTime = Date.now() + explorationTime;
+
+  const direction = getDirectionLabel(row, col);
+  log(`🗺️ Exploring ${direction} from workshop...`, "info");
+
+  renderWorldMap();
+}
+
+function cancelExploration() {
+  if (G.alchemistState !== "exploring" || !G.explorationTarget) {
+    log("Not currently exploring!", "warn");
+    return;
+  }
+
+  const { row, col } = G.explorationTarget;
+  const tile = G.worldMap.tiles[row][col];
+
+  // Calculate return time (same as exploration distance)
+  const returnTime = Math.ceil(tile.distance * 10) * 1000;
+
+  // Set returning state
+  G.alchemistState = "returning";
+  G.explorationTarget = null; // Clear target (not discovering)
+  G.explorationEndTime = Date.now() + returnTime;
+
+  log("⚠️ Exploration canceled. Returning to workshop...", "warn");
+
+  renderWorldMap();
+}
+
+function completeExploration() {
+  if (!G.explorationTarget) return;
+
+  const { row, col } = G.explorationTarget;
+  const tile = G.worldMap.tiles[row][col];
+
+  // Randomly assign zone type
+  const zoneTypes = ["forest", "mine", "swamp", "ruins", "volcano"];
+  const zoneType = randomFrom(zoneTypes);
+  const zone = ZONES.find(z => z.id === zoneType);
+
+  // Calculate resource pool based on distance
+  const basePool = zone.resourcePool ? zone.resourcePool.total : 100000;
+  const scaledTotal = Math.floor(basePool * (1 + tile.distance * 0.5));
+
+  // Reveal tile
+  tile.explored = true;
+  tile.zoneType = zoneType;
+  tile.resourcePool = { total: scaledTotal, byType: {} };
+
+  // Reset alchemist state
+  G.alchemistState = "idle";
+  G.explorationTarget = null;
+  G.explorationEndTime = null;
+
+  log(`✅ Discovered ${zone.name}! (${fmtResources(scaledTotal)} resources)`, "great");
+
+  saveGame();
+  renderWorldMap();
+}
+
+function completeReturn() {
+  // Reset alchemist state
+  G.alchemistState = "idle";
+  G.explorationTarget = null;
+  G.explorationEndTime = null;
+
+  log("🏠 Returned safely to workshop.", "info");
+
+  renderWorldMap();
+}
+
+function tickExploration(now) {
+  if (!G.explorationEndTime) return;
+
+  // Check if exploration/return is complete
+  if (now >= G.explorationEndTime) {
+    if (G.alchemistState === "exploring") {
+      completeExploration();
+    } else if (G.alchemistState === "returning") {
+      completeReturn();
+    }
+  } else {
+    // Update countdown display (partial render)
+    updateExplorationCountdown(now);
+  }
+}
+
+function updateExplorationCountdown(now) {
+  const remaining = Math.ceil((G.explorationEndTime - now) / 1000);
+  const el = document.getElementById("exploration-countdown");
+  if (el) {
+    el.textContent = `${remaining}s`;
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -441,6 +653,140 @@ function buyUpgrade(upgradeId) {
 
 // ─────────────────────────────────────────────────────
 // RENDER — ZONE PANEL (right panel)
+// ─────────────────────────────────────────────────────
+// VIEW SWITCHING
+// ─────────────────────────────────────────────────────
+
+function showWorldMap() {
+  G.currentView = "worldmap";
+
+  // Hide main layout
+  const mainLayout = document.getElementById("main-layout");
+  if (mainLayout) mainLayout.style.display = "none";
+
+  // Show worldmap panel
+  const worldmapPanel = document.getElementById("worldmap-panel");
+  if (worldmapPanel) worldmapPanel.style.display = "block";
+
+  renderWorldMap();
+}
+
+function showWorkshop() {
+  G.currentView = "workshop";
+
+  // Hide worldmap panel
+  const worldmapPanel = document.getElementById("worldmap-panel");
+  if (worldmapPanel) worldmapPanel.style.display = "none";
+
+  // Show main layout
+  const mainLayout = document.getElementById("main-layout");
+  if (mainLayout) mainLayout.style.display = "grid";
+
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────
+// WORLDMAP RENDERING
+// ─────────────────────────────────────────────────────
+
+function renderWorldMap() {
+  const panel = document.getElementById("worldmap-panel");
+  if (!panel || G.currentView !== "worldmap") return;
+
+  if (!G.worldMap) {
+    panel.innerHTML = '<div class="worldmap-header"><p>Initializing world map...</p></div>';
+    return;
+  }
+
+  // Show status message if exploring or returning
+  let statusMsg = "";
+  if (G.alchemistState === "returning" && G.explorationEndTime) {
+    const remaining = Math.ceil((G.explorationEndTime - Date.now()) / 1000);
+    statusMsg = `<p style="text-align:center;color:var(--amber);margin:10px 0;">🏃 Returning to workshop... <span id="exploration-countdown">${remaining}s</span></p>`;
+  } else if (G.alchemistState === "exploring") {
+    statusMsg = `<p style="text-align:center;color:var(--green);margin:10px 0;">🔍 Exploring distant lands...</p>`;
+  }
+
+  let html = `
+    <div class="worldmap-header">
+      <button class="btn" data-action="show-workshop" style="margin-bottom:10px;">← Back to Workshop</button>
+      <h2 style="text-align:center;color:var(--green);margin-bottom:10px;">🗺️ World Map</h2>
+      ${statusMsg}
+    </div>
+    <div class="worldmap-grid">
+  `;
+
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const tile = G.worldMap.tiles[row][col];
+      html += renderTile(tile, row, col);
+    }
+  }
+
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function renderTile(tile, row, col) {
+  const { explored, zoneType, resourcePool, distance } = tile;
+
+  // Workshop tile (clickable to return)
+  if (zoneType === "workshop") {
+    return `
+      <div class="worldmap-tile clickable" data-action="show-workshop">
+        <div class="tile-icon">🏭</div>
+        <div class="tile-name">Workshop</div>
+        <div class="tile-resources" style="color:var(--text-dim);font-size:10px;">Click to return</div>
+      </div>
+    `;
+  }
+
+  // Explored zone tile
+  if (explored && zoneType) {
+    const zone = ZONES.find(z => z.id === zoneType);
+    if (!zone) return `<div class="worldmap-tile"><span style="color:var(--red);">Error</span></div>`;
+
+    const resourcesStr = resourcePool ? fmtResources(resourcePool.total) : "?";
+    const revealClass = tile.justRevealed ? " revealed" : "";
+
+    return `
+      <div class="worldmap-tile${revealClass}">
+        <div class="tile-icon">${zone.icon}</div>
+        <div class="tile-name">${zone.name}</div>
+        <div class="tile-resources">${resourcesStr} resources</div>
+        <div style="color:var(--text-dim);font-size:9px;">Distance: ${distance.toFixed(1)}</div>
+      </div>
+    `;
+  }
+
+  // Fogged tile (exploring current target)
+  if (G.alchemistState === "exploring" && G.explorationTarget && G.explorationTarget.row === row && G.explorationTarget.col === col) {
+    const remaining = Math.ceil((G.explorationEndTime - Date.now()) / 1000);
+    return `
+      <div class="worldmap-tile">
+        <div class="tile-icon">🔍</div>
+        <div class="tile-countdown">Exploring...</div>
+        <div class="tile-countdown" id="exploration-countdown">${remaining}s</div>
+        <button class="btn-sm" data-action="cancel-exploration" style="margin-top:8px;color:var(--red);">✖ Cancel</button>
+      </div>
+    `;
+  }
+
+  // Fogged tile (when idle = clickable, when returning = disabled)
+  const clickable = G.alchemistState === "idle";
+  const clickableClass = clickable ? " clickable" : "";
+  const clickableAttr = clickable ? `data-action="explore-tile" data-row="${row}" data-col="${col}"` : '';
+
+  return `
+    <div class="worldmap-tile fogged${clickableClass}" ${clickableAttr}>
+      <div class="tile-icon">❓</div>
+      <div class="tile-name" style="color:var(--text-dim);">Unexplored</div>
+      ${clickable ? `<div style="color:var(--text-dim);font-size:9px;">Distance: ${distance.toFixed(1)}</div>` : ''}
+      ${G.alchemistState === "returning" ? '<div class="tile-countdown" style="color:var(--text-dim);font-size:10px;">Returning...</div>' : ''}
+    </div>
+  `;
+}
+
 // ─────────────────────────────────────────────────────
 
 function renderZones() {
@@ -798,6 +1144,12 @@ const ALCHEMIST_COOLDOWNS = {};
 const ALCHEMIST_GATHER_COOLDOWN = 8000; // 8 seconds per zone
 
 function alchemistGather(zoneId) {
+  // Check if alchemist is busy exploring
+  if (G.alchemistState !== "idle") {
+    log("Can't gather while exploring!", "warn");
+    return;
+  }
+
   const zone = ZONES.find(z => z.id === zoneId);
   if (!zone) return;
   const now = Date.now();
@@ -881,6 +1233,11 @@ function saveGame() {
       recipes: ALCHEMY_RECIPES.map(r=>({id:r.id,unlocked:r.unlocked})),
       zoneSlotsOverride: ZONES.map(z=>({id:z.id,maxSlots:z.maxSlots})),
       zonePools: ZONES.map(z=>({id:z.id, resourcePool:z.resourcePool})),
+      worldMap: G.worldMap,
+      alchemistState: G.alchemistState,
+      explorationTarget: G.explorationTarget,
+      explorationEndTime: G.explorationEndTime,
+      currentView: G.currentView,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -932,6 +1289,29 @@ function loadGame() {
     } else {
       // Legacy save: initialize with full pools
       initializeZoneResources();
+    }
+
+    // Restore or initialize worldmap
+    if (save.worldMap) {
+      G.worldMap = save.worldMap;
+    } else {
+      // Legacy save: initialize new worldmap
+      initializeWorldMap();
+    }
+
+    // Restore exploration state
+    G.alchemistState = save.alchemistState || "idle";
+    G.explorationTarget = save.explorationTarget || null;
+    G.explorationEndTime = save.explorationEndTime || null;
+    G.currentView = "workshop"; // Always reset to workshop view on load
+
+    // Handle in-progress exploration
+    if (G.explorationEndTime && G.explorationEndTime < Date.now()) {
+      if (G.alchemistState === "exploring") {
+        completeExploration();
+      } else if (G.alchemistState === "returning") {
+        completeReturn();
+      }
     }
 
     const elapsed = Math.floor((Date.now() - (save.savedAt||Date.now())) / 1000);
@@ -1003,6 +1383,7 @@ function gameLoop() {
 
   tickGolems(now);
   tickAlchemy(now);
+  tickExploration(now);
   tickProgressBars(now);
 
   saveTimer += delta;
@@ -1042,6 +1423,10 @@ function setupEventDelegation() {
     } else if (action === 'cancel-reset')    { cancelReset();
     } else if (action === 'alchemist-gather'){ alchemistGather(btn.dataset.zone);
     } else if (action === 'upgrade-golem')    { upgradeGolem(btn.dataset.golem, btn.dataset.upgrade);
+    } else if (action === 'show-worldmap')  { showWorldMap();
+    } else if (action === 'show-workshop')  { showWorkshop();
+    } else if (action === 'explore-tile')   { startExploration(Number(btn.dataset.row), Number(btn.dataset.col));
+    } else if (action === 'cancel-exploration') { cancelExploration();
     }
   });
 }
@@ -1060,6 +1445,11 @@ window.addEventListener("DOMContentLoaded", function() {
       return; // Only need to call once
     }
   });
+
+  // Initialize worldmap if not loaded from save
+  if (!G.worldMap) {
+    initializeWorldMap();
+  }
 
   renderAll();
   setupEventDelegation();
