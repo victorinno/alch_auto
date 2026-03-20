@@ -214,6 +214,10 @@ header {
 .zone-icon { font-size: 16px; }
 .zone-name { color: var(--amber); font-weight: bold; flex: 1; }
 .zone-meta { color: var(--text-dim); font-size: 10px; }
+.zone-resources {
+  font-weight: bold;
+  font-size: 11px;
+}
 
 .zone-slots {
   padding: 6px 8px;

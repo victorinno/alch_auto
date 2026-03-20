@@ -30,6 +30,33 @@ const ZONES = [
   { id: "volcano", name: "Ember Volcano",      icon: "🌋",  ascii: "volcano",yields: ["sulfur","moonstone"],      danger: 3, maxSlots: 1 },
 ];
 
+// ─────────────────────────────────────────────────────
+// ZONE RESOURCE DEPLETION
+// ─────────────────────────────────────────────────────
+
+// Initialize resource pools for each zone
+function initializeZoneResources() {
+  const initialPools = {
+    forest:  { total: 100000, byType: { clay: 50000, herbs: 30000, crystals: 20000 } },
+    mine:    { total: 100000, byType: { iron: 60000, crystals: 40000 } },
+    swamp:   { total: 80000,  byType: { sulfur: 50000, herbs: 30000 } },
+    ruins:   { total: 60000,  byType: { moonstone: 35000, essence: 25000 } },
+    volcano: { total: 40000,  byType: { sulfur: 25000, moonstone: 15000 } }
+  };
+
+  ZONES.forEach(zone => {
+    if (!zone.resourcePool) {
+      zone.resourcePool = initialPools[zone.id] || { total: 10000, byType: {} };
+    }
+  });
+}
+
+// Format resource numbers with "k" suffix
+function fmtResources(num) {
+  if (num >= 1000) return (num/1000).toFixed(1)+"k";
+  return num.toString();
+}
+
 const GOLEM_TYPES = {
   // Tier 1 — only needs clay+herbs (both from forest)
   clay:    { name: "Clay Golem",    tier: 1, ascii: " (o_o) \n [___] \n  | | ", speed: 8,  capacity: 4,  danger_resist: 0, cost: { clay: 5, herbs: 3 },                         unlock: 0 },
@@ -301,10 +328,36 @@ function tickGolems(now) {
 
     } else if (golem.state === "traveling" && golem.tripPhase === "back" && now >= golem.tripEnd) {
       let summary = [];
+      let totalGathered = 0;
+
+      // Add resources to player inventory and track total gathered
       for (const [res, amt] of Object.entries(golem.collected)) {
         G.resources[res] = (G.resources[res]||0) + amt;
         summary.push(`${amt}x ${RESOURCES[res].icon}`);
+        totalGathered += amt;
+
+        // Deplete zone's individual resource pool
+        if (zone && zone.resourcePool && zone.resourcePool.byType) {
+          zone.resourcePool.byType[res] = Math.max(0, (zone.resourcePool.byType[res] || 0) - amt);
+
+          // Log warning if this specific resource type is depleted
+          if (zone.resourcePool.byType[res] === 0) {
+            log(`⚠️ ${zone.name} has run out of ${RESOURCES[res].name}!`, "warn");
+          }
+        }
       }
+
+      // Deplete zone's total pool
+      if (zone && zone.resourcePool) {
+        zone.resourcePool.total = Math.max(0, zone.resourcePool.total - totalGathered);
+
+        // Check if zone is fully depleted
+        if (zone.resourcePool.total === 0) {
+          log(`💀 ${zone.name} has been depleted and is no longer available!`, "warn");
+          stateChanged = true; // Force re-render to hide depleted zone
+        }
+      }
+
       log(`✅ ${golem.name} returned: ${summary.join(" ")}`, "good");
       golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null; golem.collected = {};
       renderZones();
@@ -394,11 +447,18 @@ function renderZones() {
   const el = document.getElementById("zones-panel");
   if (!el) return;
 
-  el.innerHTML = ZONES.map(zone => {
+  // Filter out depleted zones
+  const activeZones = ZONES.filter(z => z.resourcePool && z.resourcePool.total > 0);
+
+  el.innerHTML = activeZones.map(zone => {
     const active = golemsInZone(zone.id);
     const slots  = zone.maxSlots;
     const yieldsStr = zone.yields.map(r => RESOURCES[r].icon).join(" ");
     const dangerStr = "⚠️".repeat(zone.danger) || "✅";
+
+    // Format resource pool display
+    const resourcesStr = zone.resourcePool ? fmtResources(zone.resourcePool.total) : "?";
+    const resourceColor = zone.resourcePool && zone.resourcePool.total < 1000 ? "var(--red)" : "var(--amber)";
 
     // Build slot rows
     let slotsHtml = "";
@@ -448,7 +508,7 @@ function renderZones() {
         <div class="zone-header">
           <span class="zone-icon">${zone.icon}</span>
           <span class="zone-name">${zone.name}</span>
-          <span class="zone-meta">${dangerStr} | ${yieldsStr} | ${active.length}/${slots} slots</span>
+          <span class="zone-meta">${dangerStr} | <span class="zone-resources" style="color:${resourceColor};">${resourcesStr}</span> | ${yieldsStr} | ${active.length}/${slots} slots</span>
         </div>
         <div class="zone-slots" id="zslots-${zone.id}">
           ${slotsHtml}
@@ -820,6 +880,7 @@ function saveGame() {
       upgrades: UPGRADES.map(u=>({id:u.id,purchased:u.purchased})),
       recipes: ALCHEMY_RECIPES.map(r=>({id:r.id,unlocked:r.unlocked})),
       zoneSlotsOverride: ZONES.map(z=>({id:z.id,maxSlots:z.maxSlots})),
+      zonePools: ZONES.map(z=>({id:z.id, resourcePool:z.resourcePool})),
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -861,6 +922,18 @@ function loadGame() {
       const zone = ZONES.find(z=>z.id===sz.id);
       if (zone) zone.maxSlots = sz.maxSlots;
     });
+
+    // Initialize or restore zone resource pools
+    if (save.zonePools) {
+      save.zonePools.forEach(sp => {
+        const zone = ZONES.find(z=>z.id===sp.id);
+        if (zone) zone.resourcePool = sp.resourcePool;
+      });
+    } else {
+      // Legacy save: initialize with full pools
+      initializeZoneResources();
+    }
+
     const elapsed = Math.floor((Date.now() - (save.savedAt||Date.now())) / 1000);
     if (elapsed > 5) {
       log(`⏰ Welcome back! Away for ${fmtTime(elapsed)}.`, "great");
@@ -870,19 +943,42 @@ function loadGame() {
           const zone = ZONES.find(z=>z.id===golem.zoneId);
           const tripTime = def.speed * G.golemSpeedMult;
           const trips = Math.floor(elapsed / (tripTime*2+3));
-          if (trips > 0 && zone) {
-            const capacity = def.capacity + G.golemBonusCapacity;
+          if (trips > 0 && zone && zone.resourcePool && zone.resourcePool.total > 0) {
+            const capacity = def.capacity + G.golemBonusCapacity + (golem.bonus_capacity || 0);
+            let completedTrips = 0;
             for (let t=0; t<trips; t++) {
+              // Check if zone is depleted before this trip
+              if (zone.resourcePool.total <= 0) break;
+
               let remaining = capacity;
+              let tripGathered = 0;
               const yields = [...zone.yields];
               while (remaining > 0) {
                 const res = randomFrom(yields);
                 const amt = Math.min(remaining, Math.ceil(Math.random()*3)+1);
                 G.resources[res] = (G.resources[res]||0) + amt;
                 remaining -= amt;
+                tripGathered += amt;
+
+                // Deplete from byType
+                if (zone.resourcePool.byType) {
+                  zone.resourcePool.byType[res] = Math.max(0, (zone.resourcePool.byType[res] || 0) - amt);
+                }
+              }
+
+              // Deplete zone total
+              zone.resourcePool.total = Math.max(0, zone.resourcePool.total - tripGathered);
+              completedTrips++;
+
+              // Check if zone depleted during offline progress
+              if (zone.resourcePool.total === 0) {
+                log(`💀 ${zone.name} was depleted during offline progress!`, "warn");
+                break;
               }
             }
-            log(`📦 ${golem.name} made ${trips} trips while away!`, "good");
+            if (completedTrips > 0) {
+              log(`📦 ${golem.name} made ${completedTrips} trips while away!`, "good");
+            }
           }
           golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null;
         }
@@ -956,6 +1052,15 @@ function setupEventDelegation() {
 
 window.addEventListener("DOMContentLoaded", function() {
   loadGame();
+
+  // Initialize zone resources if not loaded from save
+  ZONES.forEach(zone => {
+    if (!zone.resourcePool) {
+      initializeZoneResources();
+      return; // Only need to call once
+    }
+  });
+
   renderAll();
   setupEventDelegation();
   log("🧪 Welcome, Alchemist! Craft your first Golem to begin.", "great");

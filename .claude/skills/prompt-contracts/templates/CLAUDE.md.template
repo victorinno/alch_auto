@@ -1,0 +1,152 @@
+# CLAUDE.md — Project Constraints (always active)
+
+> This file defines the permanent constraints for this project. Claude Code reads this at the start of every session.
+
+## Stack (non-negotiable, I will mass git revert you)
+
+### Frontend
+- Framework: [e.g., Next.js 14+ App Router, React, Vue, Svelte]
+- Language: [e.g., TypeScript strict mode, JavaScript]
+- State Management: [e.g., React Query, Zustand, Redux]
+
+### Backend
+- Database: [e.g., Convex, Supabase, PostgreSQL, MongoDB]
+- API Layer: [e.g., Convex functions, tRPC, REST, GraphQL]
+- Runtime: [e.g., Node.js, Deno, Bun]
+
+### Auth
+- Provider: [e.g., Clerk, Supabase Auth, NextAuth, Auth0]
+- Pattern: [e.g., never roll custom auth, JWT, session-based]
+
+### Styling
+- System: [e.g., Tailwind only — no CSS modules, no styled-components]
+- Components: [e.g., shadcn/ui, Radix, Headless UI, custom only]
+
+### Infrastructure
+- Hosting: [e.g., Vercel, Netlify, Railway, AWS]
+- Storage: [e.g., Supabase Storage, S3, Cloudinary]
+- Real-time: [e.g., Convex, Supabase Realtime, Socket.io]
+
+---
+
+## Hard Rules
+
+### Dependencies
+- ❌ Never install a new dependency without asking first
+- ❌ Never upgrade major versions without explicit approval
+- ✅ Prefer built-in solutions over external packages
+
+### Database
+- ❌ Never modify the database schema without showing the migration plan
+- ✅ All migrations must be reversible
+- ✅ Use [your ORM/query builder] for all database access
+
+### API Patterns
+- ✅ All API calls go through [your API layer, e.g., Convex functions]
+- ❌ Never make direct database calls from frontend components
+- ✅ All endpoints must have proper error handling
+
+### Environment & Secrets
+- ✅ Environment variables go in `.env.local`, never hardcoded
+- ❌ Never commit secrets (I will find you and I will revert you)
+- ✅ Use [your secret management, e.g., Vercel env vars, Doppler]
+
+### Code Organization
+- ✅ Max [150] lines per component file
+- ✅ One component per file
+- ✅ [Your folder structure rules, e.g., /app for pages, /components for UI]
+
+---
+
+## Patterns
+
+### Component Architecture
+- ✅ Use server components by default (if Next.js)
+- ✅ Client components only when interactivity is required
+- ✅ [Your component composition rules]
+
+### Error Handling
+- ✅ Error boundaries on every route segment
+- ✅ All user-facing errors must have user-friendly messages
+- ✅ Log errors to [your error tracking, e.g., Sentry, LogRocket]
+
+### Validation
+- ✅ [Your validation library, e.g., Zod] validation on every user input
+- ✅ Validate on both client and server
+- ✅ Return typed errors
+
+### State Management
+- ✅ [Your state patterns, e.g., Server state in React Query, UI state in useState]
+- ✅ No prop drilling beyond 2 levels
+- ✅ Use context for truly global state only
+
+### TypeScript
+- ✅ Strict mode enabled
+- ✅ No `any` types (use `unknown` if needed)
+- ✅ All function parameters must be typed
+- ✅ All API responses must be typed
+
+---
+
+## Failure Conditions (Global)
+
+### Styling
+- ❌ No inline styles (use [your styling system])
+- ❌ No magic numbers (use design tokens/constants)
+- ❌ No pixel-perfect positioning (design for responsive)
+
+### Code Quality
+- ❌ No console.logs in production code
+- ❌ No commented-out code blocks
+- ❌ No TODO comments without GitHub issues linked
+- ❌ No single-letter variable names (except loop indices)
+
+### Security
+- ❌ No unescaped user input in HTML
+- ❌ No eval() or Function() constructor
+- ❌ No client-side secrets
+- ❌ No unvalidated redirects
+
+### Performance
+- ❌ No unoptimized images (use next/image or your optimizer)
+- ❌ No blocking operations in render
+- ❌ No fetching in loops
+
+---
+
+## Project-Specific Rules
+
+### [Your Project Name]
+- [Add any project-specific patterns]
+- [Add any domain-specific rules]
+- [Add any team conventions]
+
+---
+
+## Questions to Ask Before Proceeding
+
+When in doubt, Claude should ask:
+1. "Should this be a new dependency or can we use existing tools?"
+2. "Does this change require a database migration?"
+3. "Should this be a server component or client component?"
+4. "Where does this fit in the existing folder structure?"
+5. "Does this need tests?" (always yes for [critical paths])
+
+---
+
+## Session Start Ritual
+
+Every Claude Code session should begin with:
+
+```
+> Read CLAUDE.md and confirm you understand the project constraints
+> before doing anything.
+```
+
+Claude should respond by echoing back key constraints and confirming understanding.
+
+---
+
+**Last Updated:** [Date]
+**Team Members:** [Who can edit this file]
+**Review Cadence:** [How often to review/update]
