@@ -1,51 +1,83 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
 #  deploy.sh — Alchemist's Automatons
-#  Deploys local changes to GitHub Pages
-#  Usage: ./deploy.sh ["optional commit message"]
-# ─────────────────────────────────────────────
+#  Commits all local changes and deploys to GitHub Pages.
+#
+#  Requirements: git, gh (GitHub CLI, logged in)
+#  Usage:
+#    ./deploy.sh                        # auto commit message
+#    ./deploy.sh "feat: new feature"    # custom commit message
+# ─────────────────────────────────────────────────────────────
 
 set -e
 
+REPO="victorinno/alch_auto"
 BRANCH="main"
 COMMIT_MSG="${1:-"deploy: update game $(date '+%Y-%m-%d %H:%M')"}"
 
 echo ""
-echo "╔══════════════════════════════════════╗"
-echo "║   Alchemist's Automatons — Deploy    ║"
-echo "╚══════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════╗"
+echo "║    Alchemist's Automatons — Deploy       ║"
+echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# 1. Check we are inside a git repo
-if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-  echo "❌  Not inside a git repository. Run this script from the project root."
-  exit 1
+# ── 1. Sanity checks ──────────────────────────────────────────
+if ! command -v git &>/dev/null; then
+  echo "❌  git not found. Please install git."; exit 1
+fi
+if ! command -v gh &>/dev/null; then
+  echo "❌  gh CLI not found. Install from https://cli.github.com/"; exit 1
+fi
+if ! gh auth status &>/dev/null; then
+  echo "❌  Not logged in to GitHub CLI. Run: gh auth login"; exit 1
+fi
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "❌  Not inside a git repository."; exit 1
 fi
 
-# 2. Pull latest remote changes (avoid conflicts)
-echo "⬇️   Pulling latest changes from origin/$BRANCH..."
-git pull origin "$BRANCH" --rebase
+# ── 2. Pull latest ────────────────────────────────────────────
+echo "⬇️   [1/4] Pulling latest from origin/$BRANCH..."
+git pull origin "$BRANCH" --rebase --quiet
 
-# 3. Stage all changes
-echo "📦  Staging all changes..."
+# ── 3. Stage & commit ─────────────────────────────────────────
+echo "📦  [2/4] Staging all changes..."
 git add -A
 
-# 4. Commit only if there is something to commit
 if git diff --cached --quiet; then
-  echo "✅  Nothing new to commit — working tree is clean."
+  echo "      ℹ️  Nothing to commit — creating empty deploy commit to trigger Pages rebuild..."
+  git commit --allow-empty -m "$COMMIT_MSG"
 else
-  echo "💾  Committing: \"$COMMIT_MSG\""
+  echo "💾  [3/4] Committing: \"$COMMIT_MSG\""
   git commit -m "$COMMIT_MSG"
 fi
 
-# 5. Push to GitHub → triggers GitHub Pages rebuild
-echo "🚀  Pushing to origin/$BRANCH..."
+# ── 4. Push ───────────────────────────────────────────────────
+echo "🚀  [4/4] Pushing to GitHub..."
 git push origin "$BRANCH"
 
+# ── 5. Wait for Pages deploy ──────────────────────────────────
 echo ""
-echo "✅  Deploy complete!"
-echo "🌐  Your game will be live at:"
-echo "    https://victorinno.github.io/alch_auto/"
+echo "⏳  Waiting for GitHub Pages to deploy..."
+DEPLOYED=false
+for i in $(seq 1 12); do
+  sleep 10
+  STATUS=$(gh api "repos/$REPO/deployments" --jq '.[0].id' 2>/dev/null | \
+           xargs -I{} gh api "repos/$REPO/deployments/{}/statuses" --jq '.[0].state' 2>/dev/null || echo "pending")
+  COMMIT=$(gh api "repos/$REPO/deployments" --jq '.[0].sha[0:7]' 2>/dev/null || echo "?")
+  echo "    [$((i*10))s] status: $STATUS (commit: $COMMIT)"
+  if [ "$STATUS" = "success" ]; then
+    DEPLOYED=true
+    break
+  fi
+done
+
 echo ""
-echo "    (GitHub Pages usually updates within 1-2 minutes)"
+if [ "$DEPLOYED" = true ]; then
+  echo "✅  Deploy complete!"
+else
+  echo "⚠️   Deploy still in progress — check GitHub for status."
+fi
+
+echo ""
+echo "🌐  https://victorinno.github.io/alch_auto/"
 echo ""
