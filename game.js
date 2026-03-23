@@ -18,6 +18,10 @@ const RESOURCES = {
   moonstone:  { name: "Moonstone",       icon: "🌙", color: "#ddeeff" },
   sulfur:     { name: "Sulfur",          icon: "🔥", color: "#ff8800" },
   clay:       { name: "Clay",            icon: "🧱", color: "#cc7744" },
+  condensed_knowledge_alchemy: { name: "Condensed Knowledge (Alchemy)", icon: "💧", color: "#4488ff" },
+  prepared_knowledge_alchemy:  { name: "Prepared Knowledge (Alchemy)",  icon: "⚗️", color: "#aa66ff" },
+  philosophers_draft:          { name: "Philosopher's Draft",           icon: "🧪", color: "#ff6688" },
+  soul_crystal:                { name: "Soul Crystal",                  icon: "💠", color: "#ffddff" },
 };
 
 // maxSlots = max golems that can work this zone simultaneously
@@ -142,10 +146,114 @@ const ALCHEMY_RECIPES = [
   // Tier 1 — needs iron/sulfur from mine/swamp
   { id: "golem_oil",         name: "Golem Oil",         icon: "⚗️", ingredients: { herbs: 3, iron: 2 },                      produces: { essence: 6, gold: 10 }, time: 10, unlocked: false, requiresLevel: 1 },
   { id: "mana_elixir",       name: "Mana Elixir",       icon: "💜", ingredients: { crystals: 4, sulfur: 2 },                 produces: { gold: 35, essence: 4 }, time: 12, unlocked: false, requiresLevel: 1 },
-  // Tier 2 — advanced
-  { id: "philosophers_draft",name: "Philosopher's Draft",icon:"🌟", ingredients: { moonstone: 3, essence: 6, herbs: 4 },     produces: { gold: 120, essence: 12},time: 20, unlocked: false, requiresLevel: 2 },
-  // Tier 3 — endgame
-  { id: "soul_crystal",      name: "Soul Crystal",      icon: "🔮", ingredients: { crystals: 8, moonstone: 5, essence: 15 }, produces: { essence: 35, gold: 60}, time: 30, unlocked: false, requiresLevel: 3 },
+  // Tier 2 — gold production & research items
+  { id: "liquid_gold",       name: "Liquid Gold",       icon: "💰", ingredients: { moonstone: 2, sulfur: 4, iron: 3 },       produces: { gold: 150 },            time: 18, unlocked: false, requiresLevel: 2 },
+  { id: "philosophers_draft",name: "Philosopher's Draft",icon:"🧪", ingredients: { moonstone: 3, essence: 6, herbs: 4 },     produces: { philosophers_draft: 1 },time: 20, unlocked: false, requiresLevel: 2 },
+  // Tier 3 — endgame (produces items for research)
+  { id: "soul_crystal",      name: "Soul Crystal",      icon: "💠", ingredients: { crystals: 8, moonstone: 5, essence: 15 }, produces: { soul_crystal: 1}, time: 30, unlocked: false, requiresLevel: 3 },
+  // Research materials — combines both items to create Condensed Knowledge (Tier 3)
+  { id: "condensed_knowledge", name: "Condensed Knowledge", icon: "💧", ingredients: { philosophers_draft: 1, soul_crystal: 1 }, produces: { condensed_knowledge_alchemy: 5 }, time: 15, unlocked: false, requiresLevel: 3 },
+];
+
+// ─────────────────────────────────────────────────────
+// RESEARCH NODES
+// ─────────────────────────────────────────────────────
+
+const RESEARCH_NODES = [
+  // ═══════════════════════════════════════════════════
+  // TIER 1 — Infinite Research Nodes (4 nodes)
+  // ═══════════════════════════════════════════════════
+  {
+    id: "distiller_speed",
+    name: "Distiller Efficiency",
+    desc: "Reduce distillation time by 5% per level.",
+    icon: "⚡",
+    tier: 1,
+    prerequisites: [],
+    baseCost: 100, // points
+    infinite: true,
+    maxLevel: Infinity,
+    effect: (level) => {
+      // Apply 5% speed boost per level
+      if (G.distiller) {
+        G.distiller.speedMultiplier = 1 - (level * 0.05);
+      }
+    }
+  },
+  {
+    id: "injection_points",
+    name: "Knowledge Amplification",
+    desc: "Each Prepared Knowledge gives +10% more points per level.",
+    icon: "📈",
+    tier: 1,
+    prerequisites: [],
+    baseCost: 100,
+    infinite: true,
+    maxLevel: Infinity,
+    effect: (level) => {
+      G.injectionPointsMult = 1 + (level * 0.1);
+    }
+  },
+  {
+    id: "alchemy_speed",
+    name: "Alchemy Mastery",
+    desc: "Alchemy recipes complete 3% faster per level.",
+    icon: "🔥",
+    tier: 1,
+    prerequisites: [],
+    baseCost: 100,
+    infinite: true,
+    maxLevel: Infinity,
+    effect: (level) => {
+      G.alchemySpeedMult = Math.max(0.1, 1 - (level * 0.03));
+    }
+  },
+  {
+    id: "alchemy_productivity",
+    name: "Alchemy Productivity",
+    desc: "Alchemy recipes have +1% productivity per level (every 100% = +1 free item).",
+    icon: "🎁",
+    tier: 1,
+    prerequisites: [],
+    baseCost: 100,
+    infinite: true,
+    maxLevel: Infinity,
+    effect: (level) => {
+      G.alchemyProductivityBonus = level; // Stored as percentage
+    }
+  },
+
+  // ═══════════════════════════════════════════════════
+  // TIER 2 — One-Time Unlocks (2 nodes)
+  // ═══════════════════════════════════════════════════
+  {
+    id: "auto_distiller",
+    name: "Automated Distillery",
+    desc: "Distiller automatically processes Condensed Knowledge when available.",
+    icon: "🤖",
+    tier: 2,
+    prerequisites: ["distiller_speed"], // Requires at least 1 level in Distiller Efficiency
+    baseCost: 500,
+    infinite: false,
+    maxLevel: 1,
+    effect: (level) => {
+      G.autoDistiller = true;
+    }
+  },
+  {
+    id: "auto_research",
+    name: "Automated Research",
+    desc: "Automatically starts next research in queue when current completes.",
+    icon: "🧠",
+    tier: 2,
+    prerequisites: ["injection_points"], // Requires at least 1 level in Knowledge Amplification
+    baseCost: 500,
+    infinite: false,
+    maxLevel: 1,
+    effect: (level) => {
+      G.autoResearch = true;
+    }
+  }
 ];
 
 const UPGRADES = [
@@ -197,7 +305,10 @@ const ASCII_MAPS = {
 
 const G = {
   // Starting resources: enough clay+herbs to craft 1st golem immediately
-  resources: { gold: 5, essence: 0, herbs: 5, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 8 },
+  resources: {
+    gold: 5, essence: 0, herbs: 5, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 8,
+    condensed_knowledge_alchemy: 0, prepared_knowledge_alchemy: 0, philosophers_draft: 0, soul_crystal: 0
+  },
   golems: [],
   nextGolemId: 1,
   workshopLevel: 0,
@@ -219,6 +330,17 @@ const G = {
   explorationTarget: null,      // { row, col } or null
   explorationEndTime: null,     // timestamp or null
   currentView: "workshop",      // "workshop" | "worldmap"
+
+  // Research Lab State
+  distiller: null,              // { built: bool, processingQueue: [], currentProcessing: null, baseProcessingTime: 10000, speedMultiplier: 1.0 }
+  injector: null,               // { built: bool, capacity: 100, currentAmount: 0 }
+  activeResearch: null,         // { nodeId, startTime, endTime, pointsNeeded } or null
+  researchQueue: [],            // Array of nodeIds (max 10)
+  researchNodes: {},            // { nodeId: { level: number } }
+  injectionPointsMult: 1,       // Multiplier for PK → points conversion
+  alchemyProductivityBonus: 0,  // Percentage bonus (accumulated, every 100% = +1 item)
+  autoDistiller: false,         // Tier 2 research unlock
+  autoResearch: false,          // Tier 2 research unlock
 };
 
 // ─────────────────────────────────────────────────────
@@ -409,6 +531,416 @@ function updateExplorationCountdown(now) {
   if (el) {
     el.textContent = `${remaining}s`;
   }
+}
+
+// ─────────────────────────────────────────────────────
+// RESEARCH LAB LOGIC
+// ─────────────────────────────────────────────────────
+
+// Machine Building Functions
+function buildDistiller() {
+  const cost = { gold: 500, essence: 50, moonstone: 10 };
+  const requiresLevel = 2;
+
+  if (G.workshopLevel < requiresLevel) {
+    log(`Workshop level ${requiresLevel} required to build Distiller!`, "warn");
+    return;
+  }
+  if (G.distiller && G.distiller.built) {
+    log("Distiller is already built!", "warn");
+    return;
+  }
+  if (!canAfford(cost)) {
+    log("Not enough resources to build Distiller.", "warn");
+    return;
+  }
+
+  spend(cost);
+  G.distiller = {
+    built: true,
+    processingQueue: [],
+    currentProcessing: null,
+    baseProcessingTime: 10000, // 10 seconds
+    speedMultiplier: 1.0
+  };
+
+  log("🔬 Distiller built! Can now process Condensed Knowledge into Prepared Knowledge.", "great");
+  saveGame();
+  renderResearchLab();
+}
+
+function buildInjector() {
+  const cost = { gold: 300, essence: 30, crystals: 20 };
+  const requiresLevel = 2;
+
+  if (G.workshopLevel < requiresLevel) {
+    log(`Workshop level ${requiresLevel} required to build Injector!`, "warn");
+    return;
+  }
+  if (G.injector && G.injector.built) {
+    log("Injector is already built!", "warn");
+    return;
+  }
+  if (!canAfford(cost)) {
+    log("Not enough resources to build Injector.", "warn");
+    return;
+  }
+
+  spend(cost);
+  G.injector = {
+    built: true,
+    capacity: 100,
+    currentAmount: 0
+  };
+
+  log("💉 Injector built! Can now store Prepared Knowledge for research.", "great");
+  saveGame();
+  renderResearchLab();
+}
+
+// Distiller Processing Functions
+function startDistilling(ckAmount) {
+  if (!G.distiller || !G.distiller.built) {
+    log("Distiller not built yet!", "warn");
+    return;
+  }
+  if (G.distiller.processingQueue.length >= 5) {
+    log("Distiller queue is full (max 5)!", "warn");
+    return;
+  }
+  if (G.resources.condensed_knowledge_alchemy < ckAmount) {
+    log("Not enough Condensed Knowledge!", "warn");
+    return;
+  }
+
+  // Deduct CK from resources
+  G.resources.condensed_knowledge_alchemy -= ckAmount;
+
+  const processingTime = G.distiller.baseProcessingTime * G.distiller.speedMultiplier;
+  const now = Date.now();
+  const job = {
+    ckAmount,
+    startTime: now,
+    endTime: now + processingTime
+  };
+
+  G.distiller.processingQueue.push(job);
+
+  // Start processing if nothing is currently processing
+  if (!G.distiller.currentProcessing) {
+    G.distiller.currentProcessing = G.distiller.processingQueue.shift();
+  }
+
+  log(`🔬 Distilling ${ckAmount} Condensed Knowledge...`, "info");
+  saveGame();
+  renderResearchLab();
+}
+
+function tickDistiller(now) {
+  if (!G.distiller || !G.distiller.built) return;
+
+  // Auto-start processing if idle and CK is available
+  if (!G.distiller.currentProcessing && G.distiller.processingQueue.length === 0) {
+    const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
+    if (ckAvailable > 0) {
+      // Auto-queue CK (1 at a time, or all if auto-distiller research is unlocked)
+      const toQueue = G.autoDistiller ? Math.min(ckAvailable, 5) : 1;
+      startDistilling(toQueue);
+      return; // startDistilling will handle starting the first one
+    }
+  }
+
+  if (!G.distiller.currentProcessing) return;
+
+  // Check if current processing is complete
+  if (now >= G.distiller.currentProcessing.endTime) {
+    completeDistilling();
+
+    // Start next in queue
+    if (G.distiller.processingQueue.length > 0) {
+      G.distiller.currentProcessing = G.distiller.processingQueue.shift();
+    }
+  }
+}
+
+function completeDistilling() {
+  if (!G.distiller.currentProcessing) return;
+
+  const { ckAmount } = G.distiller.currentProcessing;
+  const pkProduced = ckAmount; // 1:1 conversion
+
+  // Check if injector has capacity
+  if (!G.injector || !G.injector.built) {
+    log("⚠️ Distillation complete, but Injector not built! Prepared Knowledge lost.", "warn");
+    G.distiller.currentProcessing = null;
+    renderResearchLab();
+    return;
+  }
+
+  const availableCapacity = G.injector.capacity - G.injector.currentAmount;
+  if (pkProduced > availableCapacity) {
+    log(`⚠️ Distillation complete, but Injector is full! (${G.injector.currentAmount}/${G.injector.capacity})`, "warn");
+    // Distiller stops until injector has space - keep job in currentProcessing
+    // Don't clear currentProcessing so it will retry next tick
+    renderResearchLab();
+    return;
+  }
+
+  // Add PK to injector
+  G.injector.currentAmount += pkProduced;
+  G.distiller.currentProcessing = null;
+
+  log(`✅ Distilled ${ckAmount} CK → ${pkProduced} Prepared Knowledge. Injector: ${G.injector.currentAmount}/${G.injector.capacity}`, "good");
+
+  saveGame();
+  renderResearchLab();
+}
+
+// Research Functions
+function canResearchNode(nodeId) {
+  const node = RESEARCH_NODES.find(n => n.id === nodeId);
+  if (!node) return false;
+
+  // Check current level
+  const currentLevel = G.researchNodes[nodeId]?.level || 0;
+
+  // Check if already at max level
+  if (currentLevel >= node.maxLevel) return false;
+
+  // Check prerequisites (Tier 2 nodes)
+  if (node.prerequisites.length > 0) {
+    for (const prereqId of node.prerequisites) {
+      const prereqLevel = G.researchNodes[prereqId]?.level || 0;
+      if (prereqLevel < 1) return false; // Must have at least level 1
+    }
+  }
+
+  return true;
+}
+
+function getResearchCost(nodeId) {
+  const node = RESEARCH_NODES.find(n => n.id === nodeId);
+  if (!node) return 0;
+
+  const currentLevel = G.researchNodes[nodeId]?.level || 0;
+  const nextLevel = currentLevel + 1;
+
+  // Formula: baseCost × (2^(level-1))
+  return Math.floor(node.baseCost * Math.pow(2, nextLevel - 1));
+}
+
+function queueResearch(nodeId) {
+  if (!canResearchNode(nodeId)) {
+    log("Cannot research this node (prerequisites not met or max level reached)!", "warn");
+    return;
+  }
+  if (G.researchQueue.length >= 10) {
+    log("Research queue is full (max 10)!", "warn");
+    return;
+  }
+  if (G.activeResearch && G.activeResearch.nodeId === nodeId) {
+    log("Already researching this node!", "warn");
+    return;
+  }
+  if (G.researchQueue.includes(nodeId)) {
+    log("Node already in research queue!", "warn");
+    return;
+  }
+
+  G.researchQueue.push(nodeId);
+  const node = RESEARCH_NODES.find(n => n.id === nodeId);
+  log(`📚 Queued research: ${node.name}`, "info");
+
+  // Auto-start if nothing active
+  if (!G.activeResearch) {
+    startNextResearch();
+  }
+
+  saveGame();
+  renderResearchLab();
+}
+
+function startNextResearch() {
+  if (G.researchQueue.length === 0) return;
+  if (G.activeResearch) return;
+
+  const nodeId = G.researchQueue.shift();
+  const pointsNeeded = getResearchCost(nodeId);
+  const node = RESEARCH_NODES.find(n => n.id === nodeId);
+
+  G.activeResearch = {
+    nodeId,
+    startTime: Date.now(),
+    pointsNeeded,
+    pointsAccumulated: 0,
+    lastTickTime: Date.now() // Track when we last consumed PK
+  };
+
+  log(`🔬 Research started: ${node.name} (${pointsNeeded} points needed)`, "info");
+  saveGame();
+  renderResearchLab();
+}
+
+function tickResearch(now) {
+  if (!G.activeResearch) return;
+  if (!G.injector || !G.injector.built) return;
+  if (G.injector.currentAmount <= 0) return; // No PK available
+
+  // Consume PK automatically over time
+  // Rate: 1 PK per second = 10 points per second
+  const timeSinceLastTick = now - (G.activeResearch.lastTickTime || now);
+  const secondsElapsed = timeSinceLastTick / 1000;
+
+  if (secondsElapsed >= 1) { // Consume 1 PK per second
+    const pkToConsume = Math.min(1, G.injector.currentAmount);
+    const basePoints = 10;
+    const pointsGained = Math.floor(pkToConsume * basePoints * G.injectionPointsMult);
+
+    // Deduct PK from injector
+    G.injector.currentAmount -= pkToConsume;
+
+    // Add points to research
+    G.activeResearch.pointsAccumulated += pointsGained;
+    G.activeResearch.lastTickTime = now;
+
+    // Check if research is complete
+    if (G.activeResearch.pointsAccumulated >= G.activeResearch.pointsNeeded) {
+      completeResearch();
+    }
+
+    // Re-render to show progress
+    if (G.currentView === "researchlab") {
+      renderResearchLab();
+    }
+  }
+}
+
+function injectKnowledge(pkAmount) {
+  if (!G.injector || !G.injector.built) {
+    log("Injector not built!", "warn");
+    return;
+  }
+  if (!G.activeResearch) {
+    log("No active research! Queue a research node first.", "warn");
+    return;
+  }
+  if (G.injector.currentAmount < pkAmount) {
+    log("Not enough Prepared Knowledge in Injector!", "warn");
+    return;
+  }
+
+  // Deduct PK from injector
+  G.injector.currentAmount -= pkAmount;
+
+  // Convert to points (base 10 points per PK, modified by multiplier)
+  const basePoints = 10;
+  const pointsGained = Math.floor(pkAmount * basePoints * G.injectionPointsMult);
+
+  // Add to active research
+  G.activeResearch.pointsAccumulated += pointsGained;
+
+  log(`💉 Injected ${pkAmount} PK → +${pointsGained} research points!`, "good");
+
+  // Check if research is complete
+  if (G.activeResearch.pointsAccumulated >= G.activeResearch.pointsNeeded) {
+    completeResearch();
+  }
+
+  saveGame();
+  renderResearchLab();
+}
+
+function completeResearch() {
+  if (!G.activeResearch) return;
+
+  const { nodeId } = G.activeResearch;
+  const node = RESEARCH_NODES.find(n => n.id === nodeId);
+
+  // Increment research level
+  if (!G.researchNodes[nodeId]) {
+    G.researchNodes[nodeId] = { level: 0 };
+  }
+  G.researchNodes[nodeId].level++;
+
+  const newLevel = G.researchNodes[nodeId].level;
+
+  // Apply effect
+  if (node.effect) {
+    node.effect(newLevel);
+  }
+
+  log(`✨ Research complete: ${node.name} Level ${newLevel}!`, "great");
+
+  // Clear active research
+  G.activeResearch = null;
+
+  // Auto-start next in queue if auto-research enabled
+  if (G.autoResearch && G.researchQueue.length > 0) {
+    startNextResearch();
+  }
+
+  saveGame();
+  renderResearchLab();
+}
+
+function cancelActiveResearch() {
+  if (!G.activeResearch) {
+    log("No active research to cancel!", "warn");
+    return;
+  }
+
+  const node = RESEARCH_NODES.find(n => n.id === G.activeResearch.nodeId);
+  log(`❌ Cancelled research: ${node.name}. Progress lost.`, "warn");
+
+  G.activeResearch = null;
+  saveGame();
+  renderResearchLab();
+}
+
+function removeFromQueue(nodeId) {
+  const index = G.researchQueue.indexOf(nodeId);
+  if (index === -1) {
+    log("Node not in queue!", "warn");
+    return;
+  }
+
+  G.researchQueue.splice(index, 1);
+  const node = RESEARCH_NODES.find(n => n.id === nodeId);
+  log(`❌ Removed from queue: ${node.name}`, "info");
+
+  saveGame();
+  renderResearchLab();
+}
+
+// View Switching Functions
+function showResearchLab() {
+  if (G.workshopLevel < 2) {
+    log("Workshop level 2 required to access Research Lab!", "warn");
+    return;
+  }
+
+  G.currentView = "researchlab";
+
+  // Hide main UI
+  document.getElementById("main-layout").style.display = "none";
+
+  // Show research lab panel
+  const panel = document.getElementById("researchlab-panel");
+  panel.style.display = "block";
+
+  renderResearchLab();
+}
+
+function hideResearchLab() {
+  G.currentView = "workshop";
+
+  // Hide research lab panel
+  document.getElementById("researchlab-panel").style.display = "none";
+
+  // Show main UI
+  document.getElementById("main-layout").style.display = "grid";
+
+  renderAll();
 }
 
 // ─────────────────────────────────────────────────────
@@ -788,6 +1320,274 @@ function renderTile(tile, row, col) {
 }
 
 // ─────────────────────────────────────────────────────
+// RESEARCH LAB RENDERING
+// ─────────────────────────────────────────────────────
+
+function renderResearchLab() {
+  const panel = document.getElementById("researchlab-panel");
+  if (!panel || G.currentView !== "researchlab") return;
+
+  let html = `
+    <div class="researchlab-header">
+      <button class="btn" data-action="hide-researchlab" style="margin-bottom:10px;">← Back to Workshop</button>
+      <h2 style="text-align:center;color:var(--purple);margin-bottom:10px;">🧪 Research Lab</h2>
+      <p style="text-align:center;color:var(--text-dim);font-size:11px;margin-bottom:20px;">
+        Distill Condensed Knowledge → Inject into research for upgrades
+      </p>
+    </div>
+    <div class="researchlab-content">
+      ${renderMachines()}
+      ${renderResearchTree()}
+    </div>
+  `;
+
+  panel.innerHTML = html;
+}
+
+function renderMachines() {
+  let html = '<div class="machines-section"><h3 style="color:var(--amber);margin-bottom:12px;">⚙️ Machines</h3><div class="machines-grid">';
+
+  // Distiller
+  html += renderDistiller();
+
+  // Injector
+  html += renderInjector();
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderDistiller() {
+  if (!G.distiller || !G.distiller.built) {
+    const cost = "500🪙 50✨ 10🌙";
+    const canBuild = G.workshopLevel >= 2;
+    const btnClass = canBuild ? "" : "disabled";
+    const tooltip = !canBuild ? "Requires Workshop Lvl 2" : "";
+
+    return `
+      <div class="machine-card">
+        <h4>🔬 Distiller</h4>
+        <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">Processes Condensed Knowledge → Prepared Knowledge</p>
+        <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">Processing Time: 10s | Queue: 5 max</p>
+        <button class="btn ${btnClass}" data-action="build-distiller" title="${tooltip}" style="margin-top:8px;">
+          🔨 Build (${cost})
+        </button>
+      </div>
+    `;
+  }
+
+  // Distiller is built - show status and controls
+  const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
+  const { currentProcessing, processingQueue, speedMultiplier } = G.distiller;
+  const baseTime = G.distiller.baseProcessingTime / 1000; // convert to seconds
+  const actualTime = (baseTime * speedMultiplier).toFixed(1);
+
+  let statusHtml = "";
+  if (currentProcessing) {
+    const now = Date.now();
+    const pct = Math.min(100, ((now - currentProcessing.startTime) / (currentProcessing.endTime - currentProcessing.startTime)) * 100);
+    const remaining = Math.max(0, Math.ceil((currentProcessing.endTime - now) / 1000));
+    statusHtml = `
+      <div style="margin:8px 0;">
+        <p style="font-size:10px;color:var(--green);margin:2px 0;">⚡ Processing ${currentProcessing.ckAmount} CK...</p>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <p style="font-size:9px;color:var(--text-dim);margin:2px 0;">${remaining}s remaining</p>
+      </div>
+    `;
+  } else {
+    statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Idle</p>';
+  }
+
+  let queueHtml = "";
+  if (processingQueue.length > 0) {
+    queueHtml = `<p style="font-size:10px;color:var(--amber);margin:4px 0;">📋 Queue: ${processingQueue.length}/5</p>`;
+  }
+
+  return `
+    <div class="machine-card">
+      <h4>🔬 Distiller</h4>
+      <p style="font-size:10px;color:var(--text-dim);margin:2px 0;">Time: ${actualTime}s per CK | Speed: ${(speedMultiplier * 100).toFixed(0)}%</p>
+      ${statusHtml}
+      ${queueHtml}
+      <p style="font-size:10px;margin:8px 0;">CK Available: ${ckAvailable}💧</p>
+      <div style="display:flex;gap:4px;margin-top:8px;">
+        <button class="btn-sm" data-action="distill" data-amount="1" ${ckAvailable < 1 ? 'disabled' : ''}>+1</button>
+        <button class="btn-sm" data-action="distill" data-amount="5" ${ckAvailable < 5 ? 'disabled' : ''}>+5</button>
+        <button class="btn-sm" data-action="distill" data-amount="10" ${ckAvailable < 10 ? 'disabled' : ''}>+10</button>
+        <button class="btn-sm" data-action="distill" data-amount="${Math.floor(ckAvailable)}" ${ckAvailable < 1 ? 'disabled' : ''}>Max</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderInjector() {
+  if (!G.injector || !G.injector.built) {
+    const cost = "300🪙 30✨ 20💎";
+    const canBuild = G.workshopLevel >= 2;
+    const btnClass = canBuild ? "" : "disabled";
+    const tooltip = !canBuild ? "Requires Workshop Lvl 2" : "";
+
+    return `
+      <div class="machine-card">
+        <h4>💉 Injector</h4>
+        <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">Stores Prepared Knowledge for research</p>
+        <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">Capacity: 100 PK</p>
+        <button class="btn ${btnClass}" data-action="build-injector" title="${tooltip}" style="margin-top:8px;">
+          🔨 Build (${cost})
+        </button>
+      </div>
+    `;
+  }
+
+  // Injector is built - show status and controls
+  const { capacity, currentAmount } = G.injector;
+  const pct = (currentAmount / capacity) * 100;
+  const fillColor = pct > 90 ? "var(--red)" : pct > 60 ? "var(--amber)" : "var(--green)";
+
+  let statusHtml = "";
+  if (G.activeResearch && currentAmount > 0) {
+    statusHtml = '<p style="font-size:10px;color:var(--green);margin:8px 0;">⚡ Auto-injecting into research (1 PK/sec)</p>';
+  } else if (G.activeResearch && currentAmount === 0) {
+    statusHtml = '<p style="font-size:10px;color:var(--amber);margin:8px 0;">⚠️ Waiting for more PK...</p>';
+  } else if (!G.activeResearch) {
+    statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 No active research</p>';
+  } else {
+    statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Idle</p>';
+  }
+
+  return `
+    <div class="machine-card">
+      <h4>💉 Injector</h4>
+      <p style="font-size:10px;margin:4px 0;">Stored: ${currentAmount}/${capacity} ⚗️</p>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${fillColor}"></div></div>
+      <p style="font-size:9px;color:var(--text-dim);margin:4px 0;">1 PK/sec = ${10 * G.injectionPointsMult} points/sec</p>
+      ${statusHtml}
+    </div>
+  `;
+}
+
+function renderResearchTree() {
+  let html = '<div class="research-section"><h3 style="color:var(--purple);margin-bottom:12px;">🧠 Research Tree</h3>';
+
+  // Active Research Display
+  if (G.activeResearch) {
+    const node = RESEARCH_NODES.find(n => n.id === G.activeResearch.nodeId);
+    const { pointsAccumulated, pointsNeeded } = G.activeResearch;
+    const pct = Math.min(100, (pointsAccumulated / pointsNeeded) * 100);
+    const currentLevel = G.researchNodes[G.activeResearch.nodeId]?.level || 0;
+
+    html += `
+      <div class="active-research-card">
+        <h4 style="color:var(--green);">🔬 Active Research</h4>
+        <p style="margin:4px 0;"><span style="font-size:18px;">${node.icon}</span> ${node.name} → Level ${currentLevel + 1}</p>
+        <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">${node.desc}</p>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <p style="font-size:10px;margin:4px 0;">${pointsAccumulated} / ${pointsNeeded} points</p>
+        <button class="btn-sm" data-action="cancel-research" style="color:var(--red);margin-top:4px;">✖ Cancel</button>
+      </div>
+    `;
+  }
+
+  // Research Queue Display
+  if (G.researchQueue.length > 0) {
+    html += `<div class="research-queue-card"><h4 style="color:var(--amber);">📋 Queue (${G.researchQueue.length}/10)</h4>`;
+    G.researchQueue.forEach(nodeId => {
+      const node = RESEARCH_NODES.find(n => n.id === nodeId);
+      const currentLevel = G.researchNodes[nodeId]?.level || 0;
+      const cost = getResearchCost(nodeId);
+      html += `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px;border-bottom:1px solid var(--border);">
+          <span style="font-size:11px;">${node.icon} ${node.name} → Lvl ${currentLevel + 1}</span>
+          <div>
+            <span style="font-size:10px;color:var(--text-dim);margin-right:8px;">${cost}pts</span>
+            <button class="btn-xs" data-action="remove-from-queue" data-node-id="${nodeId}">✖</button>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+
+  // Research Nodes Grid
+  html += '<div class="research-grid">';
+
+  // Tier 1 Nodes
+  html += '<div class="research-tier"><h4 style="color:var(--green);margin-bottom:8px;">🟢 Tier 1 — Infinite Research</h4>';
+  RESEARCH_NODES.filter(n => n.tier === 1).forEach(node => {
+    html += renderResearchNode(node);
+  });
+  html += '</div>';
+
+  // Tier 2 Nodes
+  html += '<div class="research-tier"><h4 style="color:var(--purple);margin-bottom:8px;">🟣 Tier 2 — Unlocks</h4>';
+  RESEARCH_NODES.filter(n => n.tier === 2).forEach(node => {
+    html += renderResearchNode(node);
+  });
+  html += '</div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+function renderResearchNode(node) {
+  const currentLevel = G.researchNodes[node.id]?.level || 0;
+  const canResearch = canResearchNode(node.id);
+  const cost = getResearchCost(node.id);
+  const isMaxed = currentLevel >= node.maxLevel;
+  const isQueued = G.researchQueue.includes(node.id);
+  const isActive = G.activeResearch && G.activeResearch.nodeId === node.id;
+
+  let statusText = "";
+  let btnText = "Queue";
+  let btnClass = "btn-sm";
+  let btnDisabled = "";
+
+  if (isMaxed) {
+    statusText = '<span style="color:var(--green);">✔ Completed</span>';
+    btnDisabled = "disabled";
+  } else if (isActive) {
+    statusText = '<span style="color:var(--green);">⚡ Researching...</span>';
+    btnDisabled = "disabled";
+  } else if (isQueued) {
+    statusText = '<span style="color:var(--amber);">📋 Queued</span>';
+    btnDisabled = "disabled";
+  } else if (!canResearch) {
+    statusText = '<span style="color:var(--red);">🔒 Locked</span>';
+    btnDisabled = "disabled";
+  }
+
+  // Show prerequisites for Tier 2
+  let prereqText = "";
+  if (node.prerequisites.length > 0 && currentLevel === 0) {
+    const prereqNames = node.prerequisites.map(pid => {
+      const pNode = RESEARCH_NODES.find(n => n.id === pid);
+      const pLevel = G.researchNodes[pid]?.level || 0;
+      const pMet = pLevel >= 1;
+      const pColor = pMet ? "var(--green)" : "var(--red)";
+      return `<span style="color:${pColor};">${pNode.name} Lvl1</span>`;
+    }).join(", ");
+    prereqText = `<p style="font-size:9px;color:var(--text-dim);margin:2px 0;">Requires: ${prereqNames}</p>`;
+  }
+
+  return `
+    <div class="research-node-card ${isMaxed ? 'completed' : ''}">
+      <div style="font-size:24px;margin-bottom:4px;">${node.icon}</div>
+      <h5 style="margin:4px 0;">${node.name}</h5>
+      <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">${node.desc}</p>
+      ${prereqText}
+      <p style="font-size:11px;margin:4px 0;">Level: ${currentLevel}${node.infinite ? '' : '/1'}</p>
+      <p style="font-size:10px;margin:4px 0;">Next: ${cost} points</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        ${statusText}
+        <button class="${btnClass}" data-action="queue-research" data-node-id="${node.id}" ${btnDisabled}>
+          ${btnText}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ─────────────────────────────────────────────────────
 
 function renderZones() {
   const el = document.getElementById("zones-panel");
@@ -977,6 +1777,36 @@ function tickProgressBars(now) {
     if (progEl) progEl.style.width = `${pct}%`;
     if (timeEl) timeEl.textContent = `${remaining}s`;
   }
+
+  // Research Lab progress bars (only update if on research view)
+  if (G.currentView === "researchlab") {
+    // Distiller progress bar
+    if (G.distiller && G.distiller.currentProcessing) {
+      const job = G.distiller.currentProcessing;
+      const pct = Math.min(100, ((now - job.startTime) / (job.endTime - job.startTime)) * 100);
+      const progEl = document.querySelector('.machine-card .progress-fill');
+      if (progEl) progEl.style.width = `${pct}%`;
+    }
+
+    // Active research progress - update points display
+    if (G.activeResearch) {
+      const card = document.querySelector('.active-research-card');
+      if (card) {
+        const pointsEl = card.querySelector('.progress-fill');
+        if (pointsEl) {
+          const { pointsAccumulated, pointsNeeded } = G.activeResearch;
+          const pct = Math.min(100, (pointsAccumulated / pointsNeeded) * 100);
+          pointsEl.style.width = `${pct}%`;
+        }
+        // Update points text
+        const paragraphs = card.querySelectorAll('p');
+        const pointsTextEl = paragraphs[paragraphs.length - 1]; // Last <p> tag
+        if (pointsTextEl) {
+          pointsTextEl.textContent = `${G.activeResearch.pointsAccumulated} / ${G.activeResearch.pointsNeeded} points`;
+        }
+      }
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -1055,7 +1885,15 @@ function renderAlchemy() {
   html += `<div style="margin-top:6px;">`;
   html += ALCHEMY_RECIPES.map(recipe => {
     if (!recipe.unlocked) return `<div class="recipe-row"><span style="color:var(--text-dim)">🔒 ${recipe.name}</span><span class="recipe-cost">Lvl ${recipe.requiresLevel}</span></div>`;
-    const costStr = Object.entries(recipe.ingredients).map(([r,a])=>`${a}${RESOURCES[r].icon}`).join(" ");
+
+    // Color code ingredients based on availability
+    const costStr = Object.entries(recipe.ingredients).map(([r,a]) => {
+      const have = G.resources[r] || 0;
+      const canAffordThis = have >= a;
+      const color = canAffordThis ? 'var(--green)' : 'var(--red)';
+      return `<span style="color:${color}">${a}${RESOURCES[r].icon}</span>`;
+    }).join(" ");
+
     const prodStr = Object.entries(recipe.produces).map(([r,a])=>`+${a}${RESOURCES[r].icon}`).join(" ");
     const affordable = canAfford(recipe.ingredients) && G.alchemyQueue.length < 3;
     return `<div class="recipe-row">
@@ -1072,22 +1910,33 @@ function renderAlchemy() {
 function renderUpgrades() {
   const el = document.getElementById("upgrades-display");
   if (!el) return;
+  const currentLevel = WORKSHOP_LEVELS[G.workshopLevel];
   const nextLevel = WORKSHOP_LEVELS[G.workshopLevel + 1];
+
+  // Helper function to render cost with color coding
+  const renderCost = (cost) => {
+    return Object.entries(cost).map(([r,a]) => {
+      const have = G.resources[r] || 0;
+      const canAffordThis = have >= a;
+      const color = canAffordThis ? 'var(--green)' : 'var(--red)';
+      return `<span style="color:${color}">${a}x ${RESOURCES[r].icon}</span>`;
+    }).join(" ");
+  };
+
   let workshopHtml = nextLevel
     ? `<button class="btn btn-amber" data-action="upgrade-workshop" ${canAfford(nextLevel.cost)?'':'disabled'}>
-        🏗️ Upgrade Workshop → ${nextLevel.name}
-        <div class="btn-cost">${Object.entries(nextLevel.cost).map(([r,a])=>`${a}x ${RESOURCES[r].icon}`).join(" ")}</div>
+        🏗️ Upgrade Workshop: ${currentLevel.name} (Lvl ${G.workshopLevel}) → ${nextLevel.name} (Lvl ${nextLevel.level})
+        <div class="btn-cost">${renderCost(nextLevel.cost)}</div>
       </button>`
-    : `<div style="color:var(--green-dim);font-size:11px;">Workshop at MAX level!</div>`;
+    : `<div style="color:var(--green-dim);font-size:11px;">Workshop at MAX level: ${currentLevel.name} (Lvl ${G.workshopLevel})</div>`;
   const upgradesHtml = UPGRADES.map(upg => {
     const locked = upg.requiresLevel > G.workshopLevel;
     const affordable = canAfford(upg.cost) && !upg.purchased && !locked;
-    const costStr = Object.entries(upg.cost).map(([r,a])=>`${a}x ${RESOURCES[r].icon}`).join(" ");
     return `<div class="upgrade-card ${upg.purchased?'purchased':''}">
       <div class="upgrade-name">${upg.purchased?"✅":"🔧"} ${upg.name}</div>
       <div class="upgrade-desc">${upg.desc}</div>
       ${!upg.purchased?`<button class="btn" style="margin-top:4px;" data-action="buy-upgrade" data-upgrade="${upg.id}" ${affordable?'':'disabled'}>
-        ${locked?`🔒 Lvl ${upg.requiresLevel}`:`Buy — ${costStr}`}
+        ${locked?`🔒 Lvl ${upg.requiresLevel}`:`Buy — ${renderCost(upg.cost)}`}
       </button>`:''}
     </div>`;
   }).join("");
@@ -1238,6 +2087,16 @@ function saveGame() {
       explorationTarget: G.explorationTarget,
       explorationEndTime: G.explorationEndTime,
       currentView: G.currentView,
+      // Research Lab State
+      distiller: G.distiller,
+      injector: G.injector,
+      activeResearch: G.activeResearch,
+      researchQueue: G.researchQueue,
+      researchNodes: G.researchNodes,
+      injectionPointsMult: G.injectionPointsMult,
+      alchemyProductivityBonus: G.alchemyProductivityBonus,
+      autoDistiller: G.autoDistiller,
+      autoResearch: G.autoResearch,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -1274,6 +2133,11 @@ function loadGame() {
     if (save.recipes) save.recipes.forEach(sr => {
       const rec = ALCHEMY_RECIPES.find(r=>r.id===sr.id);
       if (rec) rec.unlocked = sr.unlocked;
+    });
+    // Also unlock any recipes that should be unlocked based on current workshop level
+    // (handles new recipes added after save was created)
+    ALCHEMY_RECIPES.forEach(r => {
+      if (r.requiresLevel !== undefined && r.requiresLevel <= G.workshopLevel) r.unlocked = true;
     });
     if (save.zoneSlotsOverride) save.zoneSlotsOverride.forEach(sz => {
       const zone = ZONES.find(z=>z.id===sz.id);
@@ -1313,6 +2177,41 @@ function loadGame() {
         completeReturn();
       }
     }
+
+    // Restore Research Lab State
+    G.distiller = save.distiller || null;
+    G.injector = save.injector || null;
+    G.activeResearch = save.activeResearch || null;
+    G.researchQueue = save.researchQueue || [];
+    G.researchNodes = save.researchNodes || {};
+    G.injectionPointsMult = save.injectionPointsMult || 1;
+    G.alchemyProductivityBonus = save.alchemyProductivityBonus || 0;
+    G.autoDistiller = save.autoDistiller || false;
+    G.autoResearch = save.autoResearch || false;
+
+    // Handle in-progress distillation (complete if finished during offline)
+    if (G.distiller && G.distiller.currentProcessing) {
+      if (G.distiller.currentProcessing.endTime < Date.now()) {
+        completeDistilling();
+        // Process queue if items remain
+        while (G.distiller.processingQueue.length > 0 && G.distiller.processingQueue[0].endTime < Date.now()) {
+          G.distiller.currentProcessing = G.distiller.processingQueue.shift();
+          completeDistilling();
+        }
+        // Start next if available
+        if (G.distiller.processingQueue.length > 0) {
+          G.distiller.currentProcessing = G.distiller.processingQueue.shift();
+        }
+      }
+    }
+
+    // Re-apply research effects
+    Object.entries(G.researchNodes).forEach(([nodeId, data]) => {
+      const node = RESEARCH_NODES.find(n => n.id === nodeId);
+      if (node && node.effect && data.level > 0) {
+        node.effect(data.level);
+      }
+    });
 
     const elapsed = Math.floor((Date.now() - (save.savedAt||Date.now())) / 1000);
     if (elapsed > 5) {
@@ -1384,6 +2283,8 @@ function gameLoop() {
   tickGolems(now);
   tickAlchemy(now);
   tickExploration(now);
+  tickDistiller(now);
+  tickResearch(now);
   tickProgressBars(now);
 
   saveTimer += delta;
@@ -1427,6 +2328,16 @@ function setupEventDelegation() {
     } else if (action === 'show-workshop')  { showWorkshop();
     } else if (action === 'explore-tile')   { startExploration(Number(btn.dataset.row), Number(btn.dataset.col));
     } else if (action === 'cancel-exploration') { cancelExploration();
+
+    // Research Lab Actions
+    } else if (action === 'show-researchlab') { showResearchLab();
+    } else if (action === 'hide-researchlab') { hideResearchLab();
+    } else if (action === 'build-distiller')  { buildDistiller();
+    } else if (action === 'build-injector')   { buildInjector();
+    } else if (action === 'distill')          { startDistilling(Number(btn.dataset.amount));
+    } else if (action === 'queue-research')   { queueResearch(btn.dataset.nodeId);
+    } else if (action === 'cancel-research')  { cancelActiveResearch();
+    } else if (action === 'remove-from-queue') { removeFromQueue(btn.dataset.nodeId);
     }
   });
 }
