@@ -161,6 +161,26 @@ const ALCHEMY_RECIPES = [
 
 const RESEARCH_NODES = [
   // ═══════════════════════════════════════════════════
+  // TIER 0 — Foundation Unlocks
+  // ═══════════════════════════════════════════════════
+  {
+    id: "alembic_automation",
+    name: "Alembic Automation",
+    desc: "Unlocks Alembics - multiply production by assigning multiple units to recipes.",
+    icon: "⚗️",
+    tier: 0,
+    prerequisites: [],
+    baseCost: 50,
+    infinite: false,
+    maxLevel: 1,
+    effect: (level) => {
+      G.alembicsUnlocked = true;
+      log('🔓 Alembic Automation unlocked! Build Alembics to scale production.', 'great');
+      renderAlembics();
+    }
+  },
+
+  // ═══════════════════════════════════════════════════
   // TIER 1 — Infinite Research Nodes (4 nodes)
   // ═══════════════════════════════════════════════════
   {
@@ -341,6 +361,15 @@ const G = {
   alchemyProductivityBonus: 0,  // Percentage bonus (accumulated, every 100% = +1 item)
   autoDistiller: false,         // Tier 2 research unlock
   autoResearch: false,          // Tier 2 research unlock
+
+  // Alembic Automation State
+  alembicsUnlocked: false,      // Unlocked via research
+  alembicsBuilt: 0,             // Number of Alembics built (0-5)
+  maxAlembics: 5,               // Maximum number of Alembics
+  alembicConfigs: {},           // { recipeId: { recipeId, allocatedAlembics, inputBuffers, outputBuffer, speedBoost, currentCraft } }
+
+  // Debug Mode (session-only, does not persist)
+  debugMode: false              // Toggle with F2 key
 };
 
 // ─────────────────────────────────────────────────────
@@ -561,7 +590,8 @@ function buildDistiller() {
     processingQueue: [],
     currentProcessing: null,
     baseProcessingTime: 10000, // 10 seconds
-    speedMultiplier: 1.0
+    speedMultiplier: 1.0,
+    waitingForSpace: false
   };
 
   log("🔬 Distiller built! Can now process Condensed Knowledge into Prepared Knowledge.", "great");
@@ -639,14 +669,18 @@ function startDistilling(ckAmount) {
 function tickDistiller(now) {
   if (!G.distiller || !G.distiller.built) return;
 
-  // Auto-start processing if idle and CK is available
+  // Auto-start processing if idle and CK is available (but only if Injector is built)
   if (!G.distiller.currentProcessing && G.distiller.processingQueue.length === 0) {
-    const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
-    if (ckAvailable > 0) {
-      // Auto-queue CK (1 at a time, or all if auto-distiller research is unlocked)
-      const toQueue = G.autoDistiller ? Math.min(ckAvailable, 5) : 1;
-      startDistilling(toQueue);
-      return; // startDistilling will handle starting the first one
+    // Check if Injector is built before auto-processing
+    if (G.injector && G.injector.built) {
+      const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
+      const availableCapacity = G.injector.capacity - G.injector.currentAmount;
+      if (ckAvailable > 0 && availableCapacity > 0) {
+        // Auto-queue CK (1 at a time, or all if auto-distiller research is unlocked)
+        const toQueue = G.autoDistiller ? Math.min(ckAvailable, 5) : 1;
+        startDistilling(toQueue);
+        return; // startDistilling will handle starting the first one
+      }
     }
   }
 
@@ -656,9 +690,24 @@ function tickDistiller(now) {
   if (now >= G.distiller.currentProcessing.endTime) {
     completeDistilling();
 
-    // Start next in queue
-    if (G.distiller.processingQueue.length > 0) {
-      G.distiller.currentProcessing = G.distiller.processingQueue.shift();
+    // After completing, try to auto-start next processing
+    // First check if there's anything in queue
+    if (G.distiller.processingQueue.length > 0 && G.injector && G.injector.built) {
+      const availableCapacity = G.injector.capacity - G.injector.currentAmount;
+      // Only start next job if there's room in the Injector
+      if (availableCapacity > 0) {
+        G.distiller.currentProcessing = G.distiller.processingQueue.shift();
+      }
+    }
+    // If queue is empty, check if we should auto-queue more CK
+    else if (G.injector && G.injector.built) {
+      const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
+      const availableCapacity = G.injector.capacity - G.injector.currentAmount;
+      if (ckAvailable > 0 && availableCapacity > 0) {
+        // Auto-queue CK (1 at a time, or all if auto-distiller research is unlocked)
+        const toQueue = G.autoDistiller ? Math.min(ckAvailable, 5) : 1;
+        startDistilling(toQueue);
+      }
     }
   }
 }
@@ -679,18 +728,32 @@ function completeDistilling() {
 
   const availableCapacity = G.injector.capacity - G.injector.currentAmount;
   if (pkProduced > availableCapacity) {
-    log(`⚠️ Distillation complete, but Injector is full! (${G.injector.currentAmount}/${G.injector.capacity})`, "warn");
-    // Distiller stops until injector has space - keep job in currentProcessing
-    // Don't clear currentProcessing so it will retry next tick
+    // Injector doesn't have enough space - wait for research to consume some PK
+    // Keep currentProcessing so we can retry next tick
+    // Only log once to avoid spam
+    if (!G.distiller.waitingForSpace) {
+      log(`⚠️ Distillation complete, but Injector is full! Waiting for space... (${G.injector.currentAmount}/${G.injector.capacity})`, "warn");
+      G.distiller.waitingForSpace = true;
+    }
     renderResearchLab();
     return;
+  }
+
+  // Clear the waiting flag
+  if (G.distiller.waitingForSpace) {
+    G.distiller.waitingForSpace = false;
+    log(`✅ Injector has space again, continuing distillation...`, "info");
   }
 
   // Add PK to injector
   G.injector.currentAmount += pkProduced;
   G.distiller.currentProcessing = null;
 
-  log(`✅ Distilled ${ckAmount} CK → ${pkProduced} Prepared Knowledge. Injector: ${G.injector.currentAmount}/${G.injector.capacity}`, "good");
+  // Track total processed
+  if (!G.distiller.totalProcessed) G.distiller.totalProcessed = 0;
+  G.distiller.totalProcessed += ckAmount;
+
+  log(`✅ Distilled ${ckAmount} CK → ${pkProduced} PK. Injector: ${G.injector.currentAmount}/${G.injector.capacity} PK`, "good");
 
   saveGame();
   renderResearchLab();
@@ -788,7 +851,7 @@ function tickResearch(now) {
 
   // Consume PK automatically over time
   // Rate: 1 PK per second = 10 points per second
-  const timeSinceLastTick = now - (G.activeResearch.lastTickTime || now);
+  const timeSinceLastTick = now - G.activeResearch.lastTickTime;
   const secondsElapsed = timeSinceLastTick / 1000;
 
   if (secondsElapsed >= 1) { // Consume 1 PK per second
@@ -802,6 +865,9 @@ function tickResearch(now) {
     // Add points to research
     G.activeResearch.pointsAccumulated += pointsGained;
     G.activeResearch.lastTickTime = now;
+
+    // Log progress for debugging
+    log(`🔬 Research progress: +${pointsGained} points (${G.activeResearch.pointsAccumulated}/${G.activeResearch.pointsNeeded})`, "info");
 
     // Check if research is complete
     if (G.activeResearch.pointsAccumulated >= G.activeResearch.pointsNeeded) {
@@ -941,6 +1007,225 @@ function hideResearchLab() {
   document.getElementById("main-layout").style.display = "grid";
 
   renderAll();
+}
+
+// ─────────────────────────────────────────────────────
+// ALEMBIC AUTOMATION LOGIC
+// ─────────────────────────────────────────────────────
+
+function buildAlembic() {
+  if (!G.alembicsUnlocked) {
+    log("Complete Alembic Automation research first!", "warn");
+    return;
+  }
+
+  if (G.alembicsBuilt >= G.maxAlembics) {
+    log(`Maximum ${G.maxAlembics} Alembics already built!`, "warn");
+    return;
+  }
+
+  const cost = { clay: 20, iron: 15, crystals: 10, gold: 100 };
+  if (!canAfford(cost)) {
+    log("Not enough resources to build Alembic!", "warn");
+    return;
+  }
+
+  spend(cost);
+  G.alembicsBuilt++;
+  log(`⚗️ Alembic built! (${G.alembicsBuilt}/${G.maxAlembics})`, "good");
+  saveGame();
+  renderAlembics();
+}
+
+function selectAlembicRecipe(recipeId) {
+  if (!ALCHEMY_RECIPES[recipeId]) return;
+
+  if (!G.alembicConfigs[recipeId]) {
+    const recipe = ALCHEMY_RECIPES[recipeId];
+    G.alembicConfigs[recipeId] = {
+      recipeId: recipeId,
+      allocatedAlembics: 0,
+      inputBuffers: {},
+      outputBuffer: { resourceId: null, amount: 0 },
+      speedBoost: 1.0,
+      currentCraft: null
+    };
+
+    // Initialize input buffers for recipe ingredients
+    recipe.ingredients.forEach(ing => {
+      G.alembicConfigs[recipeId].inputBuffers[ing.id] = 0;
+    });
+  }
+
+  saveGame();
+  renderAlembicPanel();
+}
+
+function allocateAlembics(recipeId, count) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config) return;
+
+  if (count > G.alembicsBuilt) {
+    log(`Only ${G.alembicsBuilt} Alembics available!`, "warn");
+    return;
+  }
+
+  if (count < 0 || count > G.maxAlembics) return;
+
+  config.allocatedAlembics = count;
+
+  const recipe = ALCHEMY_RECIPES[recipeId];
+  const maxCapacity = 100 * count;
+
+  // Trim input buffers if they exceed new capacity
+  Object.keys(config.inputBuffers).forEach(resId => {
+    if (config.inputBuffers[resId] > maxCapacity) {
+      config.inputBuffers[resId] = maxCapacity;
+    }
+  });
+
+  // Trim output buffer if it exceeds new capacity
+  if (config.outputBuffer.amount > maxCapacity) {
+    config.outputBuffer.amount = maxCapacity;
+  }
+
+  // Restart craft if active (changed allocation)
+  if (config.currentCraft) {
+    config.currentCraft = null;
+  }
+
+  log(`Allocated ${count} Alembic${count !== 1 ? 's' : ''} to ${recipe.name}`, "info");
+  saveGame();
+  renderAlembicPanel();
+}
+
+function loadAlembicInput(recipeId, resourceId, amount) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config) return;
+
+  if (config.allocatedAlembics === 0) {
+    log("Allocate at least 1 Alembic first!", "warn");
+    return;
+  }
+
+  const maxCapacity = 100 * config.allocatedAlembics;
+  const currentAmount = config.inputBuffers[resourceId] || 0;
+  const availableSpace = maxCapacity - currentAmount;
+
+  if (availableSpace <= 0) {
+    log("Input buffer is full!", "warn");
+    return;
+  }
+
+  const toLoad = Math.min(amount, availableSpace, G.resources[resourceId] || 0);
+
+  if (toLoad === 0) {
+    log("Not enough resources!", "warn");
+    return;
+  }
+
+  G.resources[resourceId] -= toLoad;
+  config.inputBuffers[resourceId] = currentAmount + toLoad;
+
+  log(`Loaded ${toLoad}x ${RESOURCES[resourceId].name} into Alembic`, "info");
+
+  // Try to auto-start craft if ready
+  tryStartAlembicCraft(recipeId);
+
+  saveGame();
+  renderAlembicPanel();
+  renderResources();
+}
+
+function collectAlembicOutput(recipeId) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config || !config.outputBuffer.resourceId || config.outputBuffer.amount === 0) {
+    log("Nothing to collect!", "warn");
+    return;
+  }
+
+  const resourceId = config.outputBuffer.resourceId;
+  const amount = config.outputBuffer.amount;
+
+  G.resources[resourceId] = (G.resources[resourceId] || 0) + amount;
+  config.outputBuffer.amount = 0;
+
+  log(`Collected ${amount}x ${RESOURCES[resourceId].name}`, "good");
+
+  // Try to auto-start craft if ready
+  tryStartAlembicCraft(recipeId);
+
+  saveGame();
+  renderAlembicPanel();
+  renderResources();
+}
+
+function tryStartAlembicCraft(recipeId) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config || config.allocatedAlembics === 0 || config.currentCraft) return;
+
+  const recipe = ALCHEMY_RECIPES[recipeId];
+  const consumption = config.allocatedAlembics;
+  const maxOutputCapacity = 100 * config.allocatedAlembics;
+
+  // Check if we have enough inputs
+  for (const ing of recipe.ingredients) {
+    const needed = ing.amount * consumption;
+    if ((config.inputBuffers[ing.id] || 0) < needed) {
+      return; // Not enough inputs
+    }
+  }
+
+  // Check if output has space
+  const outputAmount = recipe.produces[0].amount * consumption;
+  const currentOutput = config.outputBuffer.amount;
+  if (currentOutput + outputAmount > maxOutputCapacity) {
+    return; // Output buffer full
+  }
+
+  // Start craft
+  const now = Date.now();
+  const craftTime = recipe.time * 1000 * config.speedBoost;
+
+  config.currentCraft = {
+    startTime: now,
+    endTime: now + craftTime
+  };
+
+  // Consume inputs
+  recipe.ingredients.forEach(ing => {
+    const needed = ing.amount * consumption;
+    config.inputBuffers[ing.id] -= needed;
+  });
+
+  renderAlembicPanel();
+}
+
+function tickAlembics(now) {
+  Object.keys(G.alembicConfigs).forEach(recipeId => {
+    const config = G.alembicConfigs[recipeId];
+
+    if (config.currentCraft && now >= config.currentCraft.endTime) {
+      // Complete craft
+      const recipe = ALCHEMY_RECIPES[recipeId];
+      const production = config.allocatedAlembics;
+      const outputAmount = recipe.produces[0].amount * production;
+
+      config.outputBuffer.resourceId = recipe.produces[0].id;
+      config.outputBuffer.amount += outputAmount;
+      config.currentCraft = null;
+
+      log(`⚗️ Alembics produced ${outputAmount}x ${RESOURCES[recipe.produces[0].id].name}`, "good");
+
+      // Try to start next craft immediately
+      tryStartAlembicCraft(recipeId);
+
+      renderAlembicPanel();
+    } else if (!config.currentCraft) {
+      // Try to auto-start if idle
+      tryStartAlembicCraft(recipeId);
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────
@@ -1383,19 +1668,43 @@ function renderDistiller() {
   const actualTime = (baseTime * speedMultiplier).toFixed(1);
 
   let statusHtml = "";
+  let autoStatusHtml = "";
+
+  // Show auto-processing indicator
+  const hasInjector = G.injector && G.injector.built;
+  const canAutoProcess = hasInjector && ckAvailable > 0;
+
+  if (canAutoProcess && !currentProcessing) {
+    autoStatusHtml = '<p style="font-size:10px;color:var(--green);margin:4px 0;animation:pulse 1.5s infinite;">🔄 Auto-processing enabled</p>';
+  } else if (hasInjector) {
+    autoStatusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:4px 0;">🔄 Auto-processing ready</p>';
+  }
+
   if (currentProcessing) {
     const now = Date.now();
     const pct = Math.min(100, ((now - currentProcessing.startTime) / (currentProcessing.endTime - currentProcessing.startTime)) * 100);
     const remaining = Math.max(0, Math.ceil((currentProcessing.endTime - now) / 1000));
+    const elapsed = Math.floor((now - currentProcessing.startTime) / 1000);
     statusHtml = `
-      <div style="margin:8px 0;">
-        <p style="font-size:10px;color:var(--green);margin:2px 0;">⚡ Processing ${currentProcessing.ckAmount} CK...</p>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-        <p style="font-size:9px;color:var(--text-dim);margin:2px 0;">${remaining}s remaining</p>
+      <div style="margin:8px 0;padding:8px;background:rgba(57,255,20,0.1);border:1px solid var(--green);border-radius:4px;">
+        <p style="font-size:11px;color:var(--green);margin:2px 0;font-weight:bold;">⚡ PROCESSING ${currentProcessing.ckAmount} CK</p>
+        <div class="progress-bar" style="margin:6px 0;"><div class="progress-fill" style="width:${pct}%;background:var(--green);"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);">
+          <span>Elapsed: ${elapsed}s</span>
+          <span>Remaining: ${remaining}s</span>
+        </div>
+        <p style="font-size:9px;color:var(--green);margin:4px 0 0 0;">→ Will produce ${currentProcessing.ckAmount} PK</p>
       </div>
     `;
   } else {
-    statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Idle</p>';
+    // Check if Injector is built
+    if (!G.injector || !G.injector.built) {
+      statusHtml = '<p style="font-size:10px;color:var(--red);margin:8px 0;padding:6px;background:rgba(255,68,68,0.1);border:1px solid var(--red);border-radius:4px;">⚠️ Build Injector to enable auto-processing!</p>';
+    } else if (ckAvailable === 0) {
+      statusHtml = '<p style="font-size:10px;color:var(--amber);margin:8px 0;">⏸️ Waiting for CK...</p>';
+    } else {
+      statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Idle (will auto-start)</p>';
+    }
   }
 
   let queueHtml = "";
@@ -1403,13 +1712,19 @@ function renderDistiller() {
     queueHtml = `<p style="font-size:10px;color:var(--amber);margin:4px 0;">📋 Queue: ${processingQueue.length}/5</p>`;
   }
 
+  // Show total CK processed counter
+  const totalProcessed = (G.distiller.totalProcessed || 0);
+  const statsHtml = totalProcessed > 0 ? `<p style="font-size:9px;color:var(--text-dim);margin:4px 0;">Total processed: ${totalProcessed} CK</p>` : '';
+
   return `
-    <div class="machine-card">
+    <div class="machine-card" style="border:2px solid ${currentProcessing ? 'var(--green)' : 'var(--border)'};">
       <h4>🔬 Distiller</h4>
       <p style="font-size:10px;color:var(--text-dim);margin:2px 0;">Time: ${actualTime}s per CK | Speed: ${(speedMultiplier * 100).toFixed(0)}%</p>
+      ${autoStatusHtml}
       ${statusHtml}
       ${queueHtml}
-      <p style="font-size:10px;margin:8px 0;">CK Available: ${ckAvailable}💧</p>
+      ${statsHtml}
+      <p style="font-size:10px;margin:8px 0;">CK Available: <span style="color:var(--amber);font-weight:bold;">${ckAvailable}💧</span></p>
       <div style="display:flex;gap:4px;margin-top:8px;">
         <button class="btn-sm" data-action="distill" data-amount="1" ${ckAvailable < 1 ? 'disabled' : ''}>+1</button>
         <button class="btn-sm" data-action="distill" data-amount="5" ${ckAvailable < 5 ? 'disabled' : ''}>+5</button>
@@ -1445,22 +1760,38 @@ function renderInjector() {
   const fillColor = pct > 90 ? "var(--red)" : pct > 60 ? "var(--amber)" : "var(--green)";
 
   let statusHtml = "";
+  let activeIndicator = "";
+
   if (G.activeResearch && currentAmount > 0) {
-    statusHtml = '<p style="font-size:10px;color:var(--green);margin:8px 0;">⚡ Auto-injecting into research (1 PK/sec)</p>';
+    const lastTick = G.activeResearch.lastTickTime || Date.now();
+    const timeSinceLastConsume = (Date.now() - lastTick) / 1000;
+    const nextConsumeIn = Math.max(0, 1 - timeSinceLastConsume).toFixed(1);
+    activeIndicator = '<p style="font-size:10px;color:var(--green);margin:4px 0;animation:pulse 1.5s infinite;">🔄 ACTIVELY INJECTING</p>';
+    statusHtml = `
+      <div style="padding:6px;background:rgba(57,255,20,0.1);border:1px solid var(--green);border-radius:4px;margin:8px 0;">
+        <p style="font-size:10px;color:var(--green);margin:2px 0;">⚡ Consuming 1 PK every second</p>
+        <p style="font-size:9px;color:var(--text-dim);margin:2px 0;">Next consumption in ${nextConsumeIn}s</p>
+        <p style="font-size:9px;color:var(--green);margin:2px 0;">→ Generating ${10 * G.injectionPointsMult} points/sec</p>
+      </div>
+    `;
   } else if (G.activeResearch && currentAmount === 0) {
-    statusHtml = '<p style="font-size:10px;color:var(--amber);margin:8px 0;">⚠️ Waiting for more PK...</p>';
+    statusHtml = '<p style="font-size:10px;color:var(--amber);margin:8px 0;padding:6px;background:rgba(255,179,0,0.1);border:1px solid var(--amber);border-radius:4px;">⚠️ Waiting for Distiller to produce PK...</p>';
   } else if (!G.activeResearch) {
-    statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 No active research</p>';
+    statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Queue research to start consuming PK</p>';
   } else {
     statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Idle</p>';
   }
 
+  // Show consumption rate info
+  const rateInfo = `<p style="font-size:9px;color:var(--text-dim);margin:4px 0;font-weight:bold;">Rate: 1 PK/sec = ${10 * G.injectionPointsMult} points/sec</p>`;
+
   return `
-    <div class="machine-card">
+    <div class="machine-card" style="border:2px solid ${G.activeResearch && currentAmount > 0 ? 'var(--green)' : 'var(--border)'};">
       <h4>💉 Injector</h4>
-      <p style="font-size:10px;margin:4px 0;">Stored: ${currentAmount}/${capacity} ⚗️</p>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${fillColor}"></div></div>
-      <p style="font-size:9px;color:var(--text-dim);margin:4px 0;">1 PK/sec = ${10 * G.injectionPointsMult} points/sec</p>
+      ${activeIndicator}
+      <p style="font-size:11px;margin:6px 0;font-weight:bold;">Stored: <span style="color:${fillColor}">${currentAmount}</span>/${capacity} ⚗️</p>
+      <div class="progress-bar" style="height:12px;"><div class="progress-fill" style="width:${pct}%;background:${fillColor}"></div></div>
+      ${rateInfo}
       ${statusHtml}
     </div>
   `;
@@ -1673,6 +2004,241 @@ function updateZoneGolemRow(golem) {
       golem.state === "traveling" && golem.tripPhase === "back" ? "← returning" : "idle";
     stateEl.textContent = stateLabel;
   }
+}
+
+// ─────────────────────────────────────────────────────
+// ALEMBIC AUTOMATION RENDERING
+// ─────────────────────────────────────────────────────
+
+function renderAlembicPanel() {
+  const panel = document.getElementById("alembic-panel");
+  if (!panel || G.currentView !== "alembics") return;
+
+  let html = `
+    <div style="max-width:1200px;margin:0 auto;padding:20px;">
+      <button class="btn" data-action="hide-alembics" style="margin-bottom:10px;">← Back to Workshop</button>
+      <h2 style="text-align:center;color:var(--purple);margin-bottom:10px;">⚗️ Alembic Automation</h2>
+      <p style="text-align:center;color:var(--text-dim);font-size:11px;margin-bottom:20px;">
+        Configure recipes and allocate Alembics (${G.alembicsBuilt}/${G.maxAlembics} built) to multiply production
+      </p>
+
+      <!-- Recipe Selection -->
+      <div style="background:var(--bg2);border:1px solid var(--border);padding:16px;margin-bottom:20px;border-radius:4px;">
+        <h3 style="color:var(--amber);margin-bottom:8px;">Select Recipe</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
+  `;
+
+  Object.values(ALCHEMY_RECIPES).forEach(recipe => {
+    const isSelected = G.alembicConfigs[recipe.id] !== undefined;
+    const borderColor = isSelected ? 'var(--green)' : 'var(--border)';
+    html += `
+      <button class="btn" data-action="select-alembic-recipe" data-recipe-id="${recipe.id}"
+        style="border-color:${borderColor};text-align:left;padding:8px;">
+        ${recipe.icon} ${recipe.name}<br>
+        <span style="font-size:9px;color:var(--text-dim);">${recipe.time}s craft</span>
+      </button>
+    `;
+  });
+
+  html += `
+        </div>
+      </div>
+  `;
+
+  // Show active configurations
+  const activeConfigs = Object.values(G.alembicConfigs).filter(c => c.allocatedAlembics > 0);
+
+  if (activeConfigs.length > 0) {
+    html += `<h3 style="color:var(--amber);margin-bottom:12px;">Active Configurations</h3>`;
+
+    activeConfigs.forEach(config => {
+      const recipe = ALCHEMY_RECIPES[config.recipeId];
+      html += renderAlembicConfigCard(config, recipe);
+    });
+  }
+
+  // Show idle configurations (allocated but not running)
+  const idleConfigs = Object.values(G.alembicConfigs).filter(c => c.allocatedAlembics === 0);
+
+  if (idleConfigs.length > 0) {
+    html += `<h3 style="color:var(--text-dim);margin:20px 0 12px 0;">Idle Configurations</h3>`;
+
+    idleConfigs.forEach(config => {
+      const recipe = ALCHEMY_RECIPES[config.recipeId];
+      html += renderAlembicConfigCard(config, recipe);
+    });
+  }
+
+  html += `</div>`;
+
+  panel.innerHTML = html;
+}
+
+function renderAlembicConfigCard(config, recipe) {
+  const maxCapacity = 100 * config.allocatedAlembics;
+  const consumption = config.allocatedAlembics * recipe.ingredients[0].amount;
+  const production = config.allocatedAlembics * recipe.produces[0].amount;
+
+  const isCrafting = config.currentCraft !== null;
+  const cardBorder = isCrafting ? 'var(--green)' : 'var(--border)';
+  const cardBg = isCrafting ? 'rgba(57,255,20,0.05)' : 'var(--bg3)';
+
+  let html = `
+    <div style="background:${cardBg};border:2px solid ${cardBorder};padding:16px;margin-bottom:16px;border-radius:4px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h4 style="color:var(--purple);font-size:14px;">${recipe.icon} ${recipe.name}</h4>
+        <span style="font-size:11px;color:var(--text-dim);">${recipe.time}s per cycle</span>
+      </div>
+
+      <!-- Allocation Slider -->
+      <div style="margin-bottom:16px;">
+        <label style="font-size:11px;color:var(--text);">
+          Allocated Alembics: <strong style="color:var(--green);">${config.allocatedAlembics}</strong>/${G.alembicsBuilt}
+        </label>
+        <input type="range" min="0" max="${G.alembicsBuilt}" value="${config.allocatedAlembics}"
+          data-action="allocate-alembics" data-recipe-id="${config.recipeId}"
+          style="width:100%;margin-top:4px;">
+        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">
+          Consumes ${consumption}x ${RESOURCES[recipe.ingredients[0].id].icon} → Produces ${production}x ${RESOURCES[recipe.produces[0].id].icon} per cycle
+        </div>
+      </div>
+  `;
+
+  if (config.allocatedAlembics > 0) {
+    // Input Buffers
+    html += `<div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--amber);margin-bottom:6px;">Input Buffers (Capacity: ${maxCapacity} each)</div>`;
+
+    recipe.ingredients.forEach(ing => {
+      const current = config.inputBuffers[ing.id] || 0;
+      const percent = (current / maxCapacity) * 100;
+      html += `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="font-size:11px;min-width:120px;">${RESOURCES[ing.id].icon} ${RESOURCES[ing.id].name}:</span>
+          <div style="flex:1;background:var(--bg);border:1px solid var(--border);height:16px;border-radius:2px;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:0;left:0;height:100%;width:${percent}%;background:var(--green);transition:width 0.3s;"></div>
+            <span style="position:absolute;top:0;left:4px;font-size:10px;color:var(--text);line-height:16px;">${current}/${maxCapacity}</span>
+          </div>
+          <button class="btn-sm" data-action="load-alembic-input" data-recipe-id="${config.recipeId}" data-resource-id="${ing.id}" data-amount="1">+1</button>
+          <button class="btn-sm" data-action="load-alembic-input" data-recipe-id="${config.recipeId}" data-resource-id="${ing.id}" data-amount="10">+10</button>
+          <button class="btn-sm" data-action="load-alembic-input" data-recipe-id="${config.recipeId}" data-resource-id="${ing.id}" data-amount="100">+100</button>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+
+    // Output Buffer
+    const outputCurrent = config.outputBuffer.amount;
+    const outputPercent = (outputCurrent / maxCapacity) * 100;
+    const outputRes = config.outputBuffer.resourceId || recipe.produces[0].id;
+
+    html += `
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--amber);margin-bottom:6px;">Output Buffer</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;min-width:120px;">${RESOURCES[outputRes].icon} ${RESOURCES[outputRes].name}:</span>
+          <div style="flex:1;background:var(--bg);border:1px solid var(--border);height:16px;border-radius:2px;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:0;left:0;height:100%;width:${outputPercent}%;background:var(--purple);transition:width 0.3s;"></div>
+            <span style="position:absolute;top:0;left:4px;font-size:10px;color:var(--text);line-height:16px;">${outputCurrent}/${maxCapacity}</span>
+          </div>
+          <button class="btn" data-action="collect-alembic-output" data-recipe-id="${config.recipeId}"
+            style="padding:4px 12px;font-size:11px;" ${outputCurrent === 0 ? 'disabled' : ''}>
+            Collect
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Progress Bar (if crafting)
+    if (isCrafting) {
+      const now = Date.now();
+      const progress = Math.min(100, ((now - config.currentCraft.startTime) / (config.currentCraft.endTime - config.currentCraft.startTime)) * 100);
+      const remaining = Math.max(0, Math.ceil((config.currentCraft.endTime - now) / 1000));
+
+      html += `
+        <div style="margin-top:12px;padding:8px;background:rgba(57,255,20,0.1);border:1px solid var(--green);border-radius:4px;">
+          <div style="font-size:11px;color:var(--green);margin-bottom:4px;">⚡ CRAFTING (${remaining}s remaining)</div>
+          <div class="progress-bar" style="height:12px;margin:4px 0;">
+            <div class="progress-fill alembic-progress-${config.recipeId}" style="width:${progress}%;background:var(--green);"></div>
+          </div>
+        </div>
+      `;
+    } else {
+      // Status message
+      let status = "Idle";
+      let statusColor = "var(--text-dim)";
+
+      // Check why not crafting
+      const needsInput = recipe.ingredients.some(ing => {
+        const needed = ing.amount * config.allocatedAlembics;
+        return (config.inputBuffers[ing.id] || 0) < needed;
+      });
+
+      const outputFull = (config.outputBuffer.amount + (recipe.produces[0].amount * config.allocatedAlembics)) > maxCapacity;
+
+      if (needsInput) {
+        status = "⚠️ Waiting for inputs";
+        statusColor = "var(--amber)";
+      } else if (outputFull) {
+        status = "⚠️ Output buffer full";
+        statusColor = "var(--red)";
+      }
+
+      html += `
+        <div style="margin-top:12px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;">
+          <div style="font-size:11px;color:${statusColor};">${status}</div>
+        </div>
+      `;
+    }
+  } else {
+    html += `
+      <div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;text-align:center;color:var(--text-dim);font-size:11px;">
+        Allocate at least 1 Alembic to activate this configuration
+      </div>
+    `;
+  }
+
+  html += `</div>`;
+
+  return html;
+}
+
+function showAlembicPanel() {
+  if (!G.alembicsUnlocked) {
+    log("Complete Alembic Automation research first!", "warn");
+    return;
+  }
+
+  if (G.alembicsBuilt === 0) {
+    log("Build at least 1 Alembic in the Workshop first!", "warn");
+    return;
+  }
+
+  G.currentView = "alembics";
+
+  // Hide main UI
+  document.getElementById("main-layout").style.display = "none";
+  document.getElementById("worldmap-panel").style.display = "none";
+  document.getElementById("researchlab-panel").style.display = "none";
+
+  // Show alembic panel
+  const panel = document.getElementById("alembic-panel");
+  panel.style.display = "block";
+
+  renderAlembicPanel();
+}
+
+function hideAlembicPanel() {
+  G.currentView = "workshop";
+
+  // Hide alembic panel
+  document.getElementById("alembic-panel").style.display = "none";
+
+  // Show main UI
+  document.getElementById("main-layout").style.display = "grid";
+
+  renderAll();
 }
 
 // ─────────────────────────────────────────────────────
@@ -1943,6 +2509,49 @@ function renderUpgrades() {
   el.innerHTML = workshopHtml + upgradesHtml;
 }
 
+function renderAlembics() {
+  const section = document.getElementById("alembics-section");
+  const el = document.getElementById("alembics-display");
+  if (!section || !el) return;
+
+  // Only show if unlocked via research
+  if (!G.alembicsUnlocked) {
+    section.style.display = "none";
+    return;
+  }
+
+  section.style.display = "block";
+
+  // Build Alembic button
+  const alembicCost = { clay: 20, iron: 15, crystals: 10, gold: 100 };
+  const canAffordAlembic = canAfford(alembicCost) && G.alembicsBuilt < G.maxAlembics;
+  const buildAlembicHtml = G.alembicsBuilt < G.maxAlembics
+    ? `<button class="btn btn-amber" data-action="build-alembic" ${canAffordAlembic ? '' : 'disabled'}>
+        🔨 Build Alembic (${G.alembicsBuilt}/${G.maxAlembics})
+        <div class="btn-cost">${Object.entries(alembicCost).map(([r, a]) => {
+          const have = G.resources[r] || 0;
+          const color = have >= a ? 'var(--green)' : 'var(--red)';
+          return `<span style="color:${color}">${a}x ${RESOURCES[r].icon}</span>`;
+        }).join(" ")}</div>
+      </button>`
+    : `<div style="color:var(--green);font-size:11px;margin-bottom:8px;">All Alembics built (${G.alembicsBuilt}/${G.maxAlembics})</div>`;
+
+  // Configure Alembics button
+  const configureHtml = G.alembicsBuilt > 0
+    ? `<button class="btn" data-action="show-alembics" style="width:100%;color:var(--purple);margin-top:6px;">
+        ⚗️ Configure Alembics
+      </button>`
+    : `<div style="color:var(--text-dim);font-size:10px;margin-top:6px;">Build at least one Alembic to configure recipes</div>`;
+
+  // Active configurations count
+  const activeConfigs = Object.values(G.alembicConfigs).filter(c => c.allocatedAlembics > 0).length;
+  const statusHtml = activeConfigs > 0
+    ? `<div style="color:var(--amber);font-size:10px;margin-top:4px;">${activeConfigs} active recipe configuration(s)</div>`
+    : '';
+
+  el.innerHTML = buildAlembicHtml + configureHtml + statusHtml;
+}
+
 function renderMap(zoneId) {
   const el = document.getElementById("ascii-map");
   if (!el) return;
@@ -1975,6 +2584,7 @@ function renderAll() {
   renderResources();
   renderRecipes();
   renderAlchemy();
+  renderAlembics();
   renderUpgrades();
   renderMap(null);
   renderFooter();
@@ -2097,6 +2707,10 @@ function saveGame() {
       alchemyProductivityBonus: G.alchemyProductivityBonus,
       autoDistiller: G.autoDistiller,
       autoResearch: G.autoResearch,
+      // Alembic State
+      alembicsUnlocked: G.alembicsUnlocked,
+      alembicsBuilt: G.alembicsBuilt,
+      alembicConfigs: G.alembicConfigs,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -2213,6 +2827,29 @@ function loadGame() {
       }
     });
 
+    // Restore Alembic State
+    G.alembicsUnlocked = save.alembicsUnlocked || false;
+    G.alembicsBuilt = save.alembicsBuilt || 0;
+    G.alembicConfigs = save.alembicConfigs || {};
+
+    // Handle in-progress Alembic crafts (complete if finished during offline)
+    if (save.alembicConfigs) {
+      Object.entries(save.alembicConfigs).forEach(([recipeId, config]) => {
+        if (config.currentCraft && config.currentCraft.endTime < Date.now()) {
+          // Complete the craft
+          const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+          if (recipe) {
+            // Add to output buffer
+            Object.entries(recipe.produces).forEach(([resourceId, baseAmount]) => {
+              const amount = baseAmount * config.allocatedAlembics;
+              config.outputBuffer[resourceId] = (config.outputBuffer[resourceId] || 0) + amount;
+            });
+          }
+          config.currentCraft = null;
+        }
+      });
+    }
+
     const elapsed = Math.floor((Date.now() - (save.savedAt||Date.now())) / 1000);
     if (elapsed > 5) {
       log(`⏰ Welcome back! Away for ${fmtTime(elapsed)}.`, "great");
@@ -2262,6 +2899,69 @@ function loadGame() {
           golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null;
         }
       });
+
+      // Alembic offline progress
+      if (G.alembicConfigs) {
+        Object.entries(G.alembicConfigs).forEach(([recipeId, config]) => {
+          if (config.allocatedAlembics === 0) return;
+
+          const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+          if (!recipe) return;
+
+          // Simulate crafting cycles during offline time
+          const craftTime = recipe.time; // in seconds
+          const possibleCycles = Math.floor(elapsed / craftTime);
+
+          if (possibleCycles > 0) {
+            let completedCycles = 0;
+
+            for (let cycle = 0; cycle < possibleCycles; cycle++) {
+              // Check if we have enough inputs for one craft
+              let canCraft = true;
+              Object.entries(recipe.ingredients).forEach(([resourceId, baseAmount]) => {
+                const needed = baseAmount * config.allocatedAlembics;
+                const available = config.inputBuffers[resourceId] || 0;
+                if (available < needed) {
+                  canCraft = false;
+                }
+              });
+
+              if (!canCraft) break;
+
+              // Check if output has space
+              let outputFull = false;
+              const maxOutputPerResource = 100 * config.allocatedAlembics;
+              Object.entries(recipe.produces).forEach(([resourceId, baseAmount]) => {
+                const produceAmount = baseAmount * config.allocatedAlembics;
+                const currentOutput = config.outputBuffer[resourceId] || 0;
+                if (currentOutput + produceAmount > maxOutputPerResource) {
+                  outputFull = true;
+                }
+              });
+
+              if (outputFull) break;
+
+              // Consume inputs
+              Object.entries(recipe.ingredients).forEach(([resourceId, baseAmount]) => {
+                const needed = baseAmount * config.allocatedAlembics;
+                config.inputBuffers[resourceId] = (config.inputBuffers[resourceId] || 0) - needed;
+              });
+
+              // Produce outputs
+              Object.entries(recipe.produces).forEach(([resourceId, baseAmount]) => {
+                const amount = baseAmount * config.allocatedAlembics;
+                config.outputBuffer[resourceId] = (config.outputBuffer[resourceId] || 0) + amount;
+              });
+
+              completedCycles++;
+            }
+
+            if (completedCycles > 0) {
+              log(`⚗️ Alembics completed ${completedCycles} ${recipe.icon} ${recipe.name} crafts while away!`, "good");
+            }
+          }
+        });
+      }
     }
     log("💾 Game loaded.", "info");
   } catch(e) { log("⚠️ Could not load save.", "warn"); }
@@ -2285,6 +2985,7 @@ function gameLoop() {
   tickExploration(now);
   tickDistiller(now);
   tickResearch(now);
+  tickAlembics(now);
   tickProgressBars(now);
 
   saveTimer += delta;
@@ -2338,8 +3039,220 @@ function setupEventDelegation() {
     } else if (action === 'queue-research')   { queueResearch(btn.dataset.nodeId);
     } else if (action === 'cancel-research')  { cancelActiveResearch();
     } else if (action === 'remove-from-queue') { removeFromQueue(btn.dataset.nodeId);
+
+    // Alembic Actions
+    } else if (action === 'show-alembics')    { showAlembicPanel();
+    } else if (action === 'hide-alembics')    { hideAlembicPanel();
+    } else if (action === 'build-alembic')    { buildAlembic();
+    } else if (action === 'select-alembic-recipe') { selectAlembicRecipe(btn.dataset.recipe);
+    } else if (action === 'allocate-alembics') {
+      const recipeId = btn.dataset.recipe;
+      const count = Number(btn.dataset.count);
+      allocateAlembics(recipeId, count);
+    } else if (action === 'load-alembic-input') {
+      const recipeId = btn.dataset.recipe;
+      const resourceId = btn.dataset.resource;
+      const amount = Number(btn.dataset.amount);
+      loadAlembicInput(recipeId, resourceId, amount);
+    } else if (action === 'collect-alembic-output') {
+      collectAlembicOutput(btn.dataset.recipe);
+
+    // Debug Actions
+    } else if (action === 'debug-give-resource')     { debugGiveResource();
+    } else if (action === 'debug-skip-time')         { debugSkipTime();
+    } else if (action === 'debug-complete-research') { debugCompleteResearch();
+    } else if (action === 'debug-build-machines')    { debugBuildMachines();
+    } else if (action === 'debug-max-workshop')      { debugMaxWorkshop();
+    } else if (action === 'debug-unlock-all-recipes') { debugUnlockAllRecipes();
     }
   });
+}
+
+// ─────────────────────────────────────────────────────
+// DEBUG FEATURES (remove before production)
+// ─────────────────────────────────────────────────────
+
+function toggleDebugMode() {
+  G.debugMode = !G.debugMode;
+  const panel = document.getElementById("debug-panel");
+  if (panel) {
+    panel.style.display = G.debugMode ? "block" : "none";
+  }
+  log(G.debugMode ? "🐛 Debug mode enabled" : "🐛 Debug mode disabled", "info");
+  if (G.debugMode) renderDebugPanel();
+}
+
+function renderDebugPanel() {
+  const panel = document.getElementById("debug-panel");
+  if (!panel || !G.debugMode) return;
+
+  // Build resource dropdown options
+  const resourceOptions = Object.keys(RESOURCES).map(resId => {
+    const res = RESOURCES[resId];
+    return `<option value="${resId}">${res.icon} ${res.name}</option>`;
+  }).join("");
+
+  panel.innerHTML = `
+    <div style="padding:12px;background:rgba(0,0,0,0.9);border:3px solid var(--red);border-radius:8px;min-width:280px;">
+      <h3 style="color:var(--red);margin:0 0 12px 0;text-align:center;">🐛 DEBUG PANEL</h3>
+
+      <!-- Resource Giver -->
+      <div style="margin-bottom:12px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;">
+        <h4 style="color:var(--amber);margin:0 0 6px 0;font-size:12px;">📦 Give Resources</h4>
+        <select id="debug-resource" style="width:100%;margin-bottom:4px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px;">
+          ${resourceOptions}
+        </select>
+        <div style="display:flex;gap:4px;">
+          <input id="debug-amount" type="number" value="100" min="1" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px;">
+          <button class="btn-sm" data-action="debug-give-resource" style="background:var(--green);">Give</button>
+        </div>
+      </div>
+
+      <!-- Time Skip -->
+      <div style="margin-bottom:12px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;">
+        <h4 style="color:var(--amber);margin:0 0 6px 0;font-size:12px;">⏰ Time Skip</h4>
+        <div style="display:flex;gap:4px;">
+          <input id="debug-skip-seconds" type="number" value="60" min="1" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px;">
+          <button class="btn-sm" data-action="debug-skip-time" style="background:var(--purple);">Skip</button>
+        </div>
+      </div>
+
+      <!-- Research Complete -->
+      <div style="margin-bottom:12px;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;">
+        <h4 style="color:var(--amber);margin:0 0 6px 0;font-size:12px;">🔬 Research</h4>
+        <button class="btn-sm" data-action="debug-complete-research" style="width:100%;background:var(--purple);">Complete Active Research</button>
+      </div>
+
+      <!-- Quick Actions -->
+      <div style="padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;">
+        <h4 style="color:var(--amber);margin:0 0 6px 0;font-size:12px;">⚡ Quick Actions</h4>
+        <button class="btn-sm" data-action="debug-build-machines" style="width:100%;margin-bottom:4px;background:var(--green);">Build All Machines</button>
+        <button class="btn-sm" data-action="debug-max-workshop" style="width:100%;margin-bottom:4px;background:var(--green);">Max Workshop Level</button>
+        <button class="btn-sm" data-action="debug-unlock-all-recipes" style="width:100%;background:var(--green);">Unlock All Recipes</button>
+      </div>
+
+      <p style="margin:8px 0 0 0;font-size:9px;color:var(--text-dim);text-align:center;">Press F2 to toggle | All actions logged</p>
+    </div>
+  `;
+}
+
+// Debug action handlers
+function debugGiveResource() {
+  const resId = document.getElementById("debug-resource")?.value;
+  const amount = parseInt(document.getElementById("debug-amount")?.value || "0");
+
+  if (!resId || amount <= 0) {
+    log("⚠️ Invalid resource or amount", "warn");
+    return;
+  }
+
+  const res = RESOURCES[resId];
+  if (!res) return;
+
+  G.resources[resId] = (G.resources[resId] || 0) + amount;
+  log(`🐛 DEBUG: Gave ${amount}x ${res.icon} ${res.name}`, "info");
+  renderResources();
+  renderRecipes();
+  renderAlchemy();
+  renderResearchLab();
+}
+
+function debugSkipTime() {
+  const seconds = parseInt(document.getElementById("debug-skip-seconds")?.value || "0");
+  if (seconds <= 0) {
+    log("⚠️ Invalid time amount", "warn");
+    return;
+  }
+
+  const now = Date.now();
+  const skipMs = seconds * 1000;
+
+  // Skip golem timers
+  G.golems.forEach(golem => {
+    if (golem.tripEnd) {
+      golem.tripEnd = Math.max(now, golem.tripEnd - skipMs);
+    }
+  });
+
+  // Skip alchemy timers
+  G.alchemyQueue.forEach(job => {
+    job.endTime = Math.max(now, job.endTime - skipMs);
+  });
+
+  // Skip distiller timer
+  if (G.distiller && G.distiller.currentProcessing) {
+    G.distiller.currentProcessing.endTime = Math.max(now, G.distiller.currentProcessing.endTime - skipMs);
+  }
+
+  // Skip exploration timer
+  if (G.explorationEndTime) {
+    G.explorationEndTime = Math.max(now, G.explorationEndTime - skipMs);
+  }
+
+  log(`🐛 DEBUG: Skipped ${seconds} seconds forward`, "info");
+  renderAll();
+}
+
+function debugCompleteResearch() {
+  if (!G.activeResearch) {
+    log("⚠️ No active research to complete", "warn");
+    return;
+  }
+
+  const node = RESEARCH_NODES.find(n => n.id === G.activeResearch.nodeId);
+  G.activeResearch.pointsAccumulated = G.activeResearch.pointsNeeded;
+
+  log(`🐛 DEBUG: Instantly completed research: ${node.name}`, "info");
+  completeResearch();
+  renderResearchLab();
+}
+
+function debugBuildMachines() {
+  if (!G.distiller) {
+    G.distiller = {
+      built: true,
+      processingQueue: [],
+      currentProcessing: null,
+      baseProcessingTime: 10000,
+      speedMultiplier: 1.0,
+      waitingForSpace: false
+    };
+    log("🐛 DEBUG: Built Distiller", "info");
+  }
+
+  if (!G.injector) {
+    G.injector = {
+      built: true,
+      capacity: 100,
+      currentAmount: 0
+    };
+    log("🐛 DEBUG: Built Injector", "info");
+  }
+
+  renderResearchLab();
+}
+
+function debugMaxWorkshop() {
+  const maxLevel = WORKSHOP_LEVELS.length - 1;
+  G.workshopLevel = maxLevel;
+
+  // Unlock all recipes
+  ALCHEMY_RECIPES.forEach(r => {
+    if (r.requiresLevel !== undefined && r.requiresLevel <= G.workshopLevel) {
+      r.unlocked = true;
+    }
+  });
+
+  log(`🐛 DEBUG: Workshop set to max level (${maxLevel})`, "info");
+  renderUpgrades();
+  renderRecipes();
+  renderAlchemy();
+}
+
+function debugUnlockAllRecipes() {
+  ALCHEMY_RECIPES.forEach(r => r.unlocked = true);
+  log("🐛 DEBUG: Unlocked all alchemy recipes", "info");
+  renderAlchemy();
 }
 
 // ─────────────────────────────────────────────────────
@@ -2364,8 +3277,18 @@ window.addEventListener("DOMContentLoaded", function() {
 
   renderAll();
   setupEventDelegation();
+
+  // Add F2 debug mode toggle listener
+  window.addEventListener("keydown", function(e) {
+    if (e.key === "F2") {
+      e.preventDefault();
+      toggleDebugMode();
+    }
+  });
+
   log("🧪 Welcome, Alchemist! Craft your first Golem to begin.", "great");
   log("💡 Tip: Craft a golem, then assign it to a zone using the Zones panel.", "info");
   log("💡 Tip: Each zone has limited slots — manage your golems wisely!", "info");
+  log("💡 Tip: Press F2 to toggle debug mode for testing.", "info");
   requestAnimationFrame(gameLoop);
 });
