@@ -1842,6 +1842,16 @@ function renderResearchTree() {
   // Research Nodes Grid
   html += '<div class="research-grid">';
 
+  // Tier 0 Nodes (Foundation Unlocks)
+  const tier0Nodes = RESEARCH_NODES.filter(n => n.tier === 0);
+  if (tier0Nodes.length > 0) {
+    html += '<div class="research-tier"><h4 style="color:var(--amber);margin-bottom:8px;">🟡 Tier 0 — Foundation Unlocks</h4>';
+    tier0Nodes.forEach(node => {
+      html += renderResearchNode(node);
+    });
+    html += '</div>';
+  }
+
   // Tier 1 Nodes
   html += '<div class="research-tier"><h4 style="color:var(--green);margin-bottom:8px;">🟢 Tier 1 — Infinite Research</h4>';
   RESEARCH_NODES.filter(n => n.tier === 1).forEach(node => {
