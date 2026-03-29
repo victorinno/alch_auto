@@ -22,6 +22,7 @@ const RESOURCES = {
   prepared_knowledge_alchemy:  { name: "Prepared Knowledge (Alchemy)",  icon: "⚗️", color: "#aa66ff" },
   philosophers_draft:          { name: "Philosopher's Draft",           icon: "🧪", color: "#ff6688" },
   soul_crystal:                { name: "Soul Crystal",                  icon: "💠", color: "#ffddff" },
+  divination_shard:            { name: "Divination Shard",              icon: "🔮", color: "#cc44ff" },
 };
 
 // maxSlots = max golems that can work this zone simultaneously
@@ -136,6 +137,9 @@ const GOLEM_TYPES = {
   crystal: { name: "Crystal Golem", tier: 3, ascii: " <*.*> \n |<_>| \n  | | ", speed: 4,  capacity: 12, danger_resist: 2, cost: { crystals: 10, essence: 8, gold: 80 },         unlock: 2 },
   // Tier 4 — needs moonstone + essence
   moon:    { name: "Moon Golem",    tier: 4, ascii: " (^v^) \n {___} \n  | | ", speed: 3,  capacity: 18, danger_resist: 3, cost: { moonstone: 8, essence: 15, gold: 200 },        unlock: 3 },
+  // Tier 5 — Intelligent Golems (require Divination research)
+  feeder:  { name: "Feeder Golem",  tier: 5, ascii: " (^_^) \n [   ] \n  | | ", speed: 5,  capacity: 10, danger_resist: 0, cost: { divination_shard: 2, clay: 5, essence: 8 },   unlock: 0, role: "feeder"  },
+  carrier: { name: "Carrier Golem", tier: 5, ascii: " (~_~) \n [___] \n  | | ", speed: 5,  capacity: 20, danger_resist: 1, cost: { divination_shard: 2, iron: 4, crystals: 6 },  unlock: 1, role: "carrier" },
 };
 
 const ALCHEMY_RECIPES = [
@@ -153,6 +157,8 @@ const ALCHEMY_RECIPES = [
   { id: "soul_crystal",      name: "Soul Crystal",      icon: "💠", ingredients: { crystals: 8, moonstone: 5, essence: 15 }, produces: { soul_crystal: 1}, time: 30, unlocked: false, requiresLevel: 3 },
   // Research materials — combines both items to create Condensed Knowledge (Tier 3)
   { id: "condensed_knowledge", name: "Condensed Knowledge", icon: "💧", ingredients: { philosophers_draft: 1, soul_crystal: 1 }, produces: { condensed_knowledge_alchemy: 5 }, time: 15, unlocked: false, requiresLevel: 3 },
+  // Divination — produces shards used to craft intelligent golems
+  { id: "divination_brew",     name: "Divination Brew",     icon: "🔮", ingredients: { soul_crystal: 2, moonstone: 3, essence: 10 },                                  produces: { divination_shard: 3 },               time: 25, unlocked: false, requiresLevel: 3 },
 ];
 
 // ─────────────────────────────────────────────────────
@@ -273,6 +279,22 @@ const RESEARCH_NODES = [
     effect: (level) => {
       G.autoResearch = true;
     }
+  },
+  {
+    id: "divination",
+    name: "Divination",
+    desc: "Imbue golems with intelligence. Unlocks Feeder and Carrier Golems that automate Alembic supply chains.",
+    icon: "🔮",
+    tier: 2,
+    prerequisites: ["alembic_automation"],
+    baseCost: 800,
+    infinite: false,
+    maxLevel: 1,
+    effect: (level) => {
+      G.intelligentGolemsUnlocked = true;
+      log('🔮 Divination unlocked! Craft Feeder and Carrier Golems to automate your Alembics.', 'great');
+      renderRecipes();
+    }
   }
 ];
 
@@ -327,7 +349,7 @@ const G = {
   // Starting resources: enough clay+herbs to craft 1st golem immediately
   resources: {
     gold: 5, essence: 0, herbs: 5, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 8,
-    condensed_knowledge_alchemy: 0, prepared_knowledge_alchemy: 0, philosophers_draft: 0, soul_crystal: 0
+    condensed_knowledge_alchemy: 0, prepared_knowledge_alchemy: 0, philosophers_draft: 0, soul_crystal: 0, divination_shard: 0
   },
   golems: [],
   nextGolemId: 1,
@@ -361,6 +383,7 @@ const G = {
   alchemyProductivityBonus: 0,  // Percentage bonus (accumulated, every 100% = +1 item)
   autoDistiller: false,         // Tier 2 research unlock
   autoResearch: false,          // Tier 2 research unlock
+  intelligentGolemsUnlocked: false, // Divination research unlock
 
   // Alembic Automation State
   alembicsUnlocked: false,      // Unlocked via research
@@ -1247,7 +1270,8 @@ function craftGolem(typeId) {
     upgrades: [],          // list of upgrade ids purchased for this golem
     danger_resist: def.danger_resist,  // starts at base type value, can be increased
     bonus_capacity: 0,     // extra carry slots from upgrades
-    speed_mult: 1.0        // travel speed multiplier from upgrades
+    speed_mult: 1.0,       // travel speed multiplier from upgrades
+    targetRecipeId: null   // for feeder/carrier: which Alembic recipe to supply
   };
   G.golems.push(golem);
   log(`✨ Crafted ${golem.name}!`, "great");
@@ -1265,6 +1289,7 @@ function assignGolemToZone(golemId, zoneId) {
   if (!golem || !zone) return;
   if (golem.state !== "idle") { log(`${golem.name} is busy!`, "warn"); return; }
   const def = GOLEM_TYPES[golem.typeId];
+  if (def.role === "feeder" || def.role === "carrier") { log(`${golem.name} is a workshop golem — assign it to an Alembic recipe instead.`, "warn"); return; }
   if (zone.danger > golem.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}! Needs Danger Resist ${zone.danger} (has ${golem.danger_resist}). Upgrade it first!`, "warn"); return; }
   if (golemsInZone(zoneId).length >= zone.maxSlots) { log(`${zone.name} is full! (${zone.maxSlots} slots)`, "warn"); return; }
   const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
@@ -1274,6 +1299,28 @@ function assignGolemToZone(golemId, zoneId) {
   renderZones();
   renderGolemRoster();
   renderMap(zoneId);
+}
+
+function assignGolemToRecipe(golemId, recipeId) {
+  const golem = G.golems.find(g => g.id == golemId);
+  if (!golem) return;
+  const def = GOLEM_TYPES[golem.typeId];
+  if (def.role !== "feeder" && def.role !== "carrier") { log(`Only Feeder/Carrier Golems can be assigned to recipes.`, "warn"); return; }
+  if (golem.state !== "idle") { log(`${golem.name} is busy — recall it first.`, "warn"); return; }
+
+  if (recipeId === "") {
+    golem.targetRecipeId = null;
+    log(`🔮 ${golem.name} unassigned.`, "info");
+  } else {
+    const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+    if (!recipe) return;
+    if (!G.alembicConfigs[recipeId]) { log(`Configure an Alembic for ${recipe.name} first.`, "warn"); return; }
+    golem.targetRecipeId = recipeId;
+    log(`🔮 ${golem.name} assigned to supply ${recipe.name}.`, "good");
+  }
+  renderGolemRoster();
+  renderAlembicPanel();
+  saveGame();
 }
 
 function recallGolem(golemId) {
@@ -1331,8 +1378,105 @@ function destroyGolem(golemId) {
 function tickGolems(now) {
   let stateChanged = false;
   for (const golem of G.golems) {
-    if (golem.state === "idle") continue;
     const def  = GOLEM_TYPES[golem.typeId];
+
+    // ── Feeder Golem: idle → feeding (5s) → deposit into alembic → idle ──
+    if (def.role === "feeder") {
+      if (golem.state === "idle") {
+        if (!golem.targetRecipeId) continue;
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        if (!config || config.allocatedAlembics === 0) continue;
+        golem.state = "feeding"; golem.tripStart = now; golem.tripEnd = now + 5000;
+        stateChanged = true;
+      } else if (golem.state === "feeding" && now >= golem.tripEnd) {
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        const recipe = ALCHEMY_RECIPES.find(r => r.id === golem.targetRecipeId);
+        if (config && recipe) {
+          const maxCapacity = 100 * config.allocatedAlembics;
+          const capacity = def.capacity + (golem.bonus_capacity || 0);
+          let remaining = capacity;
+          let totalDeposited = 0;
+          Object.entries(recipe.ingredients).forEach(([id, amtPerCraft]) => {
+            if (remaining <= 0) return;
+            const space = maxCapacity - (config.inputBuffers[id] || 0);
+            if (space <= 0) return;
+            const toDeposit = Math.min(remaining, space, G.resources[id] || 0, amtPerCraft * 5);
+            if (toDeposit > 0) {
+              G.resources[id] -= toDeposit;
+              config.inputBuffers[id] = (config.inputBuffers[id] || 0) + toDeposit;
+              remaining -= toDeposit;
+              totalDeposited += toDeposit;
+            }
+          });
+          if (totalDeposited > 0) {
+            log(`🔮 ${golem.name} fed ${totalDeposited} resources to ${recipe.name} Alembic.`, "info");
+            tryStartAlembicCraft(golem.targetRecipeId);
+            renderResources(); renderAlembicPanel();
+          }
+        }
+        golem.state = "idle"; golem.tripStart = null; golem.tripEnd = null;
+        stateChanged = true;
+      }
+      continue;
+    }
+
+    // ── Carrier Golem: idle → pickup (4s, takes from G.resources) → delivering (4s) → deposit → idle ──
+    if (def.role === "carrier") {
+      if (golem.state === "idle") {
+        if (!golem.targetRecipeId) continue;
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        if (!config || config.allocatedAlembics === 0) continue;
+        golem.state = "pickup"; golem.tripPhase = "pickup";
+        golem.tripStart = now; golem.tripEnd = now + 4000; golem.collected = {};
+        stateChanged = true;
+      } else if (golem.state === "pickup" && now >= golem.tripEnd) {
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        const recipe = ALCHEMY_RECIPES.find(r => r.id === golem.targetRecipeId);
+        if (config && recipe) {
+          const maxCapacity = 100 * config.allocatedAlembics;
+          const capacity = def.capacity + (golem.bonus_capacity || 0);
+          let remaining = capacity;
+          Object.entries(recipe.ingredients).forEach(([id, amtPerCraft]) => {
+            if (remaining <= 0) return;
+            const space = maxCapacity - (config.inputBuffers[id] || 0);
+            if (space <= 0) return;
+            const toCarry = Math.min(remaining, space, G.resources[id] || 0, amtPerCraft * 10);
+            if (toCarry > 0) {
+              G.resources[id] -= toCarry;
+              golem.collected[id] = (golem.collected[id] || 0) + toCarry;
+              remaining -= toCarry;
+            }
+          });
+          renderResources();
+        }
+        golem.state = "delivering"; golem.tripPhase = "delivering";
+        golem.tripStart = now; golem.tripEnd = now + 4000;
+        stateChanged = true;
+      } else if (golem.state === "delivering" && now >= golem.tripEnd) {
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        const recipe = ALCHEMY_RECIPES.find(r => r.id === golem.targetRecipeId);
+        if (config && recipe) {
+          let totalDeposited = 0;
+          Object.entries(golem.collected).forEach(([id, amount]) => {
+            if (amount > 0) {
+              config.inputBuffers[id] = (config.inputBuffers[id] || 0) + amount;
+              totalDeposited += amount;
+            }
+          });
+          if (totalDeposited > 0) {
+            log(`🚚 ${golem.name} delivered ${totalDeposited} resources to ${recipe.name} Alembic.`, "good");
+            tryStartAlembicCraft(golem.targetRecipeId);
+            renderAlembicPanel();
+          }
+        }
+        golem.state = "idle"; golem.tripPhase = null;
+        golem.tripStart = null; golem.tripEnd = null; golem.collected = {};
+        stateChanged = true;
+      }
+      continue;
+    }
+
+    if (golem.state === "idle") continue;
     const zone = ZONES.find(z => z.id === golem.zoneId);
     const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
 
@@ -2217,6 +2361,28 @@ function renderAlembicConfigCard(config, recipe) {
     `;
   }
 
+  // Assigned intelligent golems
+  const assignedGolems = G.golems.filter(g => g.targetRecipeId === config.recipeId);
+  if (G.intelligentGolemsUnlocked && assignedGolems.length > 0) {
+    const stateLabels = { idle: "waiting", feeding: "⚡ feeding", pickup: "🚚 pickup", delivering: "🚚 delivering" };
+    html += `
+      <div style="margin-top:12px;padding:8px;background:rgba(204,68,255,0.07);border:1px solid var(--purple);border-radius:4px;">
+        <div style="font-size:10px;color:var(--purple);margin-bottom:4px;">🔮 Assigned Golems:</div>
+        ${assignedGolems.map(g => {
+          const gDef = GOLEM_TYPES[g.typeId];
+          const stateLabel = stateLabels[g.state] || g.state;
+          return `<div style="font-size:10px;color:var(--text);">${gDef.role === "feeder" ? "⚗️" : "🚚"} ${g.name} — ${stateLabel}</div>`;
+        }).join("")}
+      </div>
+    `;
+  } else if (G.intelligentGolemsUnlocked) {
+    html += `
+      <div style="margin-top:12px;padding:6px 8px;border:1px dashed var(--border);border-radius:4px;font-size:10px;color:var(--text-dim);">
+        🔮 No Feeder/Carrier assigned — assign one from the Golem Roster
+      </div>
+    `;
+  }
+
   html += `</div>`;
 
   return html;
@@ -2272,10 +2438,58 @@ function renderGolemRoster() {
   }
   el.innerHTML = G.golems.map(golem => {
     const def = GOLEM_TYPES[golem.typeId];
-    const zone = ZONES.find(z => z.id === golem.zoneId);
-    const statusColor = golem.state === "idle" ? "var(--amber)" : "var(--green)";
-    const statusText  = golem.state === "idle" ? "Idle" : `→ ${zone?.name || "?"}`;
     const isIdle = golem.state === "idle";
+    const isIntelligent = def.role === "feeder" || def.role === "carrier";
+
+    // ── Intelligent golem (feeder / carrier) ──
+    if (isIntelligent) {
+      const stateLabels = { idle: "Idle", feeding: "⚡ Feeding…", pickup: "🚚 Picking up…", delivering: "🚚 Delivering…" };
+      const stateColor  = isIdle ? "var(--amber)" : "var(--purple)";
+      const statusText  = stateLabels[golem.state] || golem.state;
+      const assignedRecipe = golem.targetRecipeId ? ALCHEMY_RECIPES.find(r => r.id === golem.targetRecipeId) : null;
+
+      // Recipe assignment dropdown (only when idle)
+      let assignHtml = "";
+      if (isIdle) {
+        const configuredRecipes = Object.keys(G.alembicConfigs).filter(rid => G.alembicConfigs[rid].allocatedAlembics > 0);
+        const options = configuredRecipes.map(rid => {
+          const r = ALCHEMY_RECIPES.find(x => x.id === rid);
+          return `<option value="${rid}" ${golem.targetRecipeId === rid ? "selected" : ""}>${r?.icon} ${r?.name}</option>`;
+        }).join("");
+        assignHtml = `
+          <div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border);font-size:10px;">
+            <span style="color:var(--text-dim);">Assign to Alembic:</span>
+            <select data-action="assign-golem-recipe" data-golem="${golem.id}"
+              style="background:var(--bg2);color:var(--text);border:1px solid var(--border);font-size:10px;margin-left:4px;">
+              <option value="">— Unassigned —</option>
+              ${options}
+            </select>
+            ${configuredRecipes.length === 0 ? '<span style="color:var(--text-dim);margin-left:4px;">(Configure an Alembic first)</span>' : ''}
+          </div>`;
+      } else if (assignedRecipe) {
+        assignHtml = `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">→ ${assignedRecipe.icon} ${assignedRecipe.name}</div>`;
+      }
+
+      return `<div style="border:1px solid var(--purple);padding:5px 7px;margin-bottom:5px;background:var(--bg3);">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;color:var(--purple);flex:1;">🔮 ${golem.name}</span>
+          <span style="font-size:10px;color:var(--text-dim);">T${def.tier}</span>
+          <span style="font-size:10px;color:${stateColor};">${statusText}</span>
+          ${isIdle
+            ? `<button class="btn-sm" data-action="destroy-golem" data-golem="${golem.id}"
+                 style="color:var(--red);padding:1px 5px;font-size:10px;">✕</button>`
+            : `<button class="btn-sm" data-action="recall-zone" data-golem="${golem.id}"
+                 style="color:var(--amber);padding:1px 5px;font-size:10px;">↩</button>`
+          }
+        </div>
+        ${assignHtml}
+      </div>`;
+    }
+
+    // ── Standard golem ──
+    const zone = ZONES.find(z => z.id === golem.zoneId);
+    const statusColor = isIdle ? "var(--amber)" : "var(--green)";
+    const statusText  = isIdle ? "Idle" : `→ ${zone?.name || "?"}`;
 
     // Danger resist badge
     const drColor = golem.danger_resist === 0 ? "var(--red)" : golem.danger_resist === 1 ? "var(--amber)" : "var(--green)";
@@ -2435,6 +2649,9 @@ function renderRecipes() {
   const slots = maxGolems - G.golems.length;
   el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px;">Golem slots: ${G.golems.length}/${maxGolems} &mdash; <span style="color:${slots>0?'var(--green)':'var(--red)'}">${slots} slot(s) free</span></div>`
     + Object.entries(GOLEM_TYPES).map(([typeId, def]) => {
+      // Hide intelligent golems unless Divination is researched
+      if ((def.role === "feeder" || def.role === "carrier") && !G.intelligentGolemsUnlocked) return "";
+
       const workshopLocked = G.workshopLevel < def.unlock;
       const noSlots = slots <= 0;
       const costMissing = !canAfford(def.cost, G.craftCostMult);
@@ -2747,6 +2964,7 @@ function saveGame() {
       alembicsUnlocked: G.alembicsUnlocked,
       alembicsBuilt: G.alembicsBuilt,
       alembicConfigs: G.alembicConfigs,
+      intelligentGolemsUnlocked: G.intelligentGolemsUnlocked,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -2758,12 +2976,14 @@ function loadGame() {
     if (!raw) return;
     const save = JSON.parse(raw);
     Object.assign(G.resources, save.resources||{});
+    if (G.resources.divination_shard === undefined) G.resources.divination_shard = 0;
     G.golems           = (save.golems||[]).map(g => ({
       ...g,
       upgrades: g.upgrades || [],
       danger_resist: g.danger_resist !== undefined ? g.danger_resist : (GOLEM_TYPES[g.typeId]?.danger_resist || 0),
       bonus_capacity: g.bonus_capacity || 0,
-      speed_mult: g.speed_mult || 1.0
+      speed_mult: g.speed_mult || 1.0,
+      targetRecipeId: g.targetRecipeId || null
     }));
     G.nextGolemId      = save.nextGolemId||1;
     G.workshopLevel    = save.workshopLevel||0;
@@ -2838,6 +3058,7 @@ function loadGame() {
     G.alchemyProductivityBonus = save.alchemyProductivityBonus || 0;
     G.autoDistiller = save.autoDistiller || false;
     G.autoResearch = save.autoResearch || false;
+    G.intelligentGolemsUnlocked = save.intelligentGolemsUnlocked || false;
 
     // Handle in-progress distillation (complete if finished during offline)
     if (G.distiller && G.distiller.currentProcessing) {
@@ -3039,6 +3260,15 @@ function gameLoop() {
 // ─────────────────────────────────────────────────────
 
 function setupEventDelegation() {
+  // Change event for select dropdowns (e.g. assign-golem-recipe)
+  document.getElementById('app').addEventListener('change', function(e) {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    if (el.dataset.action === 'assign-golem-recipe') {
+      assignGolemToRecipe(Number(el.dataset.golem), el.value);
+    }
+  });
+
   document.getElementById('app').addEventListener('click', function(e) {
     const btn = e.target.closest('[data-action]');
     if (!btn || btn.disabled) return;
