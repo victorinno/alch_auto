@@ -1,0 +1,126 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: █████╗ ██╗ ██████╗██╗ ██╗███████╗███╗ ███╗██╗███████╗████████╗ ██╔══██╗██║ ██╔════╝██║ ██║██╔════╝████╗ ████║██║██╔════╝╚══██╔══╝ ███████║██║ ██║ ███████║█████╗ ██╔████╔██║██║███████╗ ██║ ██╔══██║██║ ██║ ██╔══██║██╔══╝ ██║╚██╔╝██║██║╚════██║ ██║ ██║ ██║███████╗╚██████╗██║ ██║███████╗██║ ╚═╝ ██║██║███████║ ██║ ╚═╝ ╚═╝╚══════╝ ╚═════╝╚═╝ ╚═╝╚══════╝╚═╝ ╚═╝╚═╝╚══════╝ ╚═╝
+      - paragraph [ref=e6]: ~ Automatons & Golems ~
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - button "← Back to Workshop" [ref=e9] [cursor=pointer]
+      - heading "🧪 Research Lab" [level=2] [ref=e10]
+      - paragraph [ref=e11]: Distill Condensed Knowledge → Inject into research for upgrades
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - heading "⚙️ Machines" [level=3] [ref=e14]
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - heading "🔬 Distiller" [level=4] [ref=e17]
+            - paragraph [ref=e18]: "Time: 10.0s per CK | Speed: 100%"
+            - paragraph [ref=e19]: 🔄 Auto-processing ready
+            - paragraph [ref=e20]: ⏸️ Waiting for CK...
+            - paragraph [ref=e21]: "CK Available: 0💧"
+            - generic [ref=e22]:
+              - button "+1" [disabled] [ref=e23]
+              - button "+5" [disabled] [ref=e24]
+              - button "+10" [disabled] [ref=e25]
+              - button "Max" [disabled] [ref=e26]
+          - generic [ref=e27]:
+            - heading "💉 Injector" [level=4] [ref=e28]
+            - paragraph [ref=e29]: "Stored: 0/100 ⚗️"
+            - paragraph [ref=e31]: "Rate: 1 PK/sec = 10 points/sec"
+            - paragraph [ref=e32]: 💤 Queue research to start consuming PK
+      - generic [ref=e33]:
+        - heading "🧠 Research Tree" [level=3] [ref=e34]
+        - generic [ref=e35]:
+          - generic [ref=e36]:
+            - heading "🟢 Tier 1 — Infinite Research" [level=4] [ref=e37]
+            - generic [ref=e38]:
+              - generic [ref=e39]: ⚡
+              - heading "Distiller Efficiency" [level=5] [ref=e40]
+              - paragraph [ref=e41]: Reduce distillation time by 5% per level.
+              - paragraph [ref=e42]: "Level: 0"
+              - paragraph [ref=e43]: "Next: 100 points"
+              - button "Queue" [ref=e45] [cursor=pointer]
+            - generic [ref=e46]:
+              - generic [ref=e47]: 📈
+              - heading "Knowledge Amplification" [level=5] [ref=e48]
+              - paragraph [ref=e49]: Each Prepared Knowledge gives +10% more points per level.
+              - paragraph [ref=e50]: "Level: 0"
+              - paragraph [ref=e51]: "Next: 100 points"
+              - button "Queue" [ref=e53] [cursor=pointer]
+            - generic [ref=e54]:
+              - generic [ref=e55]: 🔥
+              - heading "Alchemy Mastery" [level=5] [ref=e56]
+              - paragraph [ref=e57]: Alchemy recipes complete 3% faster per level.
+              - paragraph [ref=e58]: "Level: 0"
+              - paragraph [ref=e59]: "Next: 100 points"
+              - button "Queue" [ref=e61] [cursor=pointer]
+            - generic [ref=e62]:
+              - generic [ref=e63]: 🎁
+              - heading "Alchemy Productivity" [level=5] [ref=e64]
+              - paragraph [ref=e65]: Alchemy recipes have +1% productivity per level (every 100% = +1 free item).
+              - paragraph [ref=e66]: "Level: 0"
+              - paragraph [ref=e67]: "Next: 100 points"
+              - button "Queue" [ref=e69] [cursor=pointer]
+          - generic [ref=e70]:
+            - heading "🟣 Tier 2 — Unlocks" [level=4] [ref=e71]
+            - generic [ref=e72]:
+              - generic [ref=e73]: 🤖
+              - heading "Automated Distillery" [level=5] [ref=e74]
+              - paragraph [ref=e75]: Distiller automatically processes Condensed Knowledge when available.
+              - paragraph [ref=e76]: "Requires: Distiller Efficiency Lvl1"
+              - paragraph [ref=e77]: "Level: 0/1"
+              - paragraph [ref=e78]: "Next: 500 points"
+              - generic [ref=e79]:
+                - generic [ref=e80]: 🔒 Locked
+                - button "Queue" [disabled] [ref=e81]
+            - generic [ref=e82]:
+              - generic [ref=e83]: 🧠
+              - heading "Automated Research" [level=5] [ref=e84]
+              - paragraph [ref=e85]: Automatically starts next research in queue when current completes.
+              - paragraph [ref=e86]: "Requires: Knowledge Amplification Lvl1"
+              - paragraph [ref=e87]: "Level: 0/1"
+              - paragraph [ref=e88]: "Next: 500 points"
+              - generic [ref=e89]:
+                - generic [ref=e90]: 🔒 Locked
+                - button "Queue" [disabled] [ref=e91]
+  - generic [ref=e93]:
+    - heading "🐛 DEBUG PANEL" [level=3] [ref=e94]
+    - generic [ref=e95]:
+      - heading "📦 Give Resources" [level=4] [ref=e96]
+      - combobox [ref=e97]:
+        - option "🪙 Gold Coins"
+        - option "✨ Arcane Essence"
+        - option "🌿 Wild Herbs"
+        - option "💎 Mana Crystals"
+        - option "⚙️ Iron Ore"
+        - option "🌙 Moonstone"
+        - option "🔥 Sulfur"
+        - option "🧱 Clay"
+        - option "💧 Condensed Knowledge (Alchemy)"
+        - option "⚗️ Prepared Knowledge (Alchemy)" [selected]
+        - option "🧪 Philosopher's Draft"
+        - option "💠 Soul Crystal"
+      - generic [ref=e98]:
+        - spinbutton [ref=e99]: "100"
+        - button "Give" [ref=e100] [cursor=pointer]
+    - generic [ref=e101]:
+      - heading "⏰ Time Skip" [level=4] [ref=e102]
+      - generic [ref=e103]:
+        - spinbutton [ref=e104]: "60"
+        - button "Skip" [ref=e105] [cursor=pointer]
+    - generic [ref=e106]:
+      - heading "🔬 Research" [level=4] [ref=e107]
+      - button "Complete Active Research" [ref=e108] [cursor=pointer]
+    - generic [ref=e109]:
+      - heading "⚡ Quick Actions" [level=4] [ref=e110]
+      - button "Build All Machines" [ref=e111] [cursor=pointer]
+      - button "Max Workshop Level" [ref=e112] [cursor=pointer]
+      - button "Unlock All Recipes" [ref=e113] [cursor=pointer]
+    - paragraph [ref=e114]: Press F2 to toggle | All actions logged
+  - contentinfo [ref=e115]:
+    - generic [ref=e116]: "Workshop: Master Lab (Lvl 3) | Golems: 0/25 (0 active) | Time: 0h 0m 59s"
+    - button "⚠ Reset" [ref=e117] [cursor=pointer]
+```

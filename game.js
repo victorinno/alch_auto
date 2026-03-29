@@ -1038,10 +1038,10 @@ function buildAlembic() {
 }
 
 function selectAlembicRecipe(recipeId) {
-  if (!ALCHEMY_RECIPES[recipeId]) return;
+  const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+  if (!recipe) return;
 
   if (!G.alembicConfigs[recipeId]) {
-    const recipe = ALCHEMY_RECIPES[recipeId];
     G.alembicConfigs[recipeId] = {
       recipeId: recipeId,
       allocatedAlembics: 0,
@@ -1052,8 +1052,8 @@ function selectAlembicRecipe(recipeId) {
     };
 
     // Initialize input buffers for recipe ingredients
-    recipe.ingredients.forEach(ing => {
-      G.alembicConfigs[recipeId].inputBuffers[ing.id] = 0;
+    Object.keys(recipe.ingredients).forEach(id => {
+      G.alembicConfigs[recipeId].inputBuffers[id] = 0;
     });
   }
 
@@ -1074,7 +1074,7 @@ function allocateAlembics(recipeId, count) {
 
   config.allocatedAlembics = count;
 
-  const recipe = ALCHEMY_RECIPES[recipeId];
+  const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
   const maxCapacity = 100 * count;
 
   // Trim input buffers if they exceed new capacity
