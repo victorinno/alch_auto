@@ -1988,7 +1988,7 @@ function renderInjector() {
 
   const rateInfo = `<p style="font-size:9px;color:var(--text-dim);margin:4px 0;font-weight:bold;">Rate: 1 PK/sec = ${10 * G.injectionPointsMult} points/sec</p>`;
 
-  const divPoolHtml = G.intelligentGolemsUnlocked ? `
+  const divPoolHtml = divAmount > 0 || (G.resources.condensed_knowledge_divination || 0) > 0 ? `
     <p style="font-size:11px;margin:6px 0;">Divination PK: <span style="color:${divFillColor};font-weight:bold;">${divAmount}</span>/${capacity} 🔮</p>
     <div class="progress-bar" style="height:8px;margin-bottom:8px;"><div class="progress-fill" style="width:${divPct}%;background:${divFillColor}"></div></div>
   ` : '';
@@ -2126,7 +2126,10 @@ function renderResearchNode(node) {
       <p style="font-size:10px;color:var(--text-dim);margin:4px 0;">${node.desc}</p>
       ${prereqText}
       <p style="font-size:11px;margin:4px 0;">Level: ${currentLevel}${node.infinite ? '' : '/1'}</p>
-      <p style="font-size:10px;margin:4px 0;">Next: ${cost} points</p>
+      ${node.knowledgeType === "divination"
+        ? `<p style="font-size:10px;margin:4px 0;">Cost: <span style="color:#4488ff;">⚗️ ${cost} Alchemy PK</span> + <span style="color:#cc44ff;">🔮 ${cost} Divination PK</span></p>`
+        : `<p style="font-size:10px;margin:4px 0;">Cost: <span style="color:#4488ff;">⚗️ ${cost} Alchemy PK</span></p>`
+      }
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
         ${statusText}
         <button class="${btnClass}" data-action="queue-research" data-node-id="${node.id}" ${btnDisabled}>
