@@ -2176,7 +2176,7 @@ function renderAlembicConfigCard(config, recipe) {
 
       html += `
         <div style="margin-top:12px;padding:8px;background:rgba(57,255,20,0.1);border:1px solid var(--green);border-radius:4px;">
-          <div style="font-size:11px;color:var(--green);margin-bottom:4px;">⚡ CRAFTING (${remaining}s remaining)</div>
+          <div class="alembic-timer-${config.recipeId}" style="font-size:11px;color:var(--green);margin-bottom:4px;">⚡ CRAFTING (${remaining}s remaining)</div>
           <div class="progress-bar" style="height:12px;margin:4px 0;">
             <div class="progress-fill alembic-progress-${config.recipeId}" style="width:${progress}%;background:var(--green);"></div>
           </div>
@@ -2390,6 +2390,24 @@ function tickProgressBars(now) {
         }
       }
     }
+  }
+
+  // Update alembic progress bars
+  if (G.alembicsUnlocked) {
+    Object.keys(G.alembicConfigs).forEach(recipeId => {
+      const config = G.alembicConfigs[recipeId];
+      if (!config.currentCraft) return;
+
+      const fill = document.querySelector(`.alembic-progress-${recipeId}`);
+      const timer = document.querySelector(`.alembic-timer-${recipeId}`);
+      if (!fill && !timer) return;
+
+      const progress = Math.min(100, ((now - config.currentCraft.startTime) / (config.currentCraft.endTime - config.currentCraft.startTime)) * 100);
+      const remaining = Math.max(0, Math.ceil((config.currentCraft.endTime - now) / 1000));
+
+      if (fill) fill.style.width = progress + '%';
+      if (timer) timer.textContent = `⚡ CRAFTING (${remaining}s remaining)`;
+    });
   }
 }
 
