@@ -1164,20 +1164,20 @@ function tryStartAlembicCraft(recipeId) {
   const config = G.alembicConfigs[recipeId];
   if (!config || config.allocatedAlembics === 0 || config.currentCraft) return;
 
-  const recipe = ALCHEMY_RECIPES[recipeId];
+  const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
   const consumption = config.allocatedAlembics;
   const maxOutputCapacity = 100 * config.allocatedAlembics;
 
   // Check if we have enough inputs
-  for (const ing of recipe.ingredients) {
-    const needed = ing.amount * consumption;
-    if ((config.inputBuffers[ing.id] || 0) < needed) {
+  for (const [id, amount] of Object.entries(recipe.ingredients)) {
+    const needed = amount * consumption;
+    if ((config.inputBuffers[id] || 0) < needed) {
       return; // Not enough inputs
     }
   }
 
   // Check if output has space
-  const outputAmount = recipe.produces[0].amount * consumption;
+  const outputAmount = Object.values(recipe.produces)[0] * consumption;
   const currentOutput = config.outputBuffer.amount;
   if (currentOutput + outputAmount > maxOutputCapacity) {
     return; // Output buffer full
@@ -1193,9 +1193,9 @@ function tryStartAlembicCraft(recipeId) {
   };
 
   // Consume inputs
-  recipe.ingredients.forEach(ing => {
-    const needed = ing.amount * consumption;
-    config.inputBuffers[ing.id] -= needed;
+  Object.entries(recipe.ingredients).forEach(([id, amount]) => {
+    const needed = amount * consumption;
+    config.inputBuffers[id] -= needed;
   });
 
   renderAlembicPanel();
@@ -1207,15 +1207,16 @@ function tickAlembics(now) {
 
     if (config.currentCraft && now >= config.currentCraft.endTime) {
       // Complete craft
-      const recipe = ALCHEMY_RECIPES[recipeId];
+      const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
       const production = config.allocatedAlembics;
-      const outputAmount = recipe.produces[0].amount * production;
+      const outputResId = Object.keys(recipe.produces)[0];
+      const outputAmount = recipe.produces[outputResId] * production;
 
-      config.outputBuffer.resourceId = recipe.produces[0].id;
+      config.outputBuffer.resourceId = outputResId;
       config.outputBuffer.amount += outputAmount;
       config.currentCraft = null;
 
-      log(`⚗️ Alembics produced ${outputAmount}x ${RESOURCES[recipe.produces[0].id].name}`, "good");
+      log(`⚗️ Alembics produced ${outputAmount}x ${RESOURCES[outputResId].name}`, "good");
 
       // Try to start next craft immediately
       tryStartAlembicCraft(recipeId);
@@ -2038,11 +2039,11 @@ function renderAlembicPanel() {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
   `;
 
-  Object.values(ALCHEMY_RECIPES).forEach(recipe => {
+  ALCHEMY_RECIPES.forEach(recipe => {
     const isSelected = G.alembicConfigs[recipe.id] !== undefined;
     const borderColor = isSelected ? 'var(--green)' : 'var(--border)';
     html += `
-      <button class="btn" data-action="select-alembic-recipe" data-recipe-id="${recipe.id}"
+      <button class="btn" data-action="select-alembic-recipe" data-recipe="${recipe.id}"
         style="border-color:${borderColor};text-align:left;padding:8px;">
         ${recipe.icon} ${recipe.name}<br>
         <span style="font-size:9px;color:var(--text-dim);">${recipe.time}s craft</span>
@@ -2062,7 +2063,7 @@ function renderAlembicPanel() {
     html += `<h3 style="color:var(--amber);margin-bottom:12px;">Active Configurations</h3>`;
 
     activeConfigs.forEach(config => {
-      const recipe = ALCHEMY_RECIPES[config.recipeId];
+      const recipe = ALCHEMY_RECIPES.find(r => r.id === config.recipeId);
       html += renderAlembicConfigCard(config, recipe);
     });
   }
@@ -2074,7 +2075,7 @@ function renderAlembicPanel() {
     html += `<h3 style="color:var(--text-dim);margin:20px 0 12px 0;">Idle Configurations</h3>`;
 
     idleConfigs.forEach(config => {
-      const recipe = ALCHEMY_RECIPES[config.recipeId];
+      const recipe = ALCHEMY_RECIPES.find(r => r.id === config.recipeId);
       html += renderAlembicConfigCard(config, recipe);
     });
   }
@@ -2086,12 +2087,16 @@ function renderAlembicPanel() {
 
 function renderAlembicConfigCard(config, recipe) {
   const maxCapacity = 100 * config.allocatedAlembics;
-  const consumption = config.allocatedAlembics * recipe.ingredients[0].amount;
-  const production = config.allocatedAlembics * recipe.produces[0].amount;
+  const outputResId = Object.keys(recipe.produces)[0];
+  const production = config.allocatedAlembics * recipe.produces[outputResId];
 
   const isCrafting = config.currentCraft !== null;
   const cardBorder = isCrafting ? 'var(--green)' : 'var(--border)';
   const cardBg = isCrafting ? 'rgba(57,255,20,0.05)' : 'var(--bg3)';
+
+  const ingredientSummary = Object.entries(recipe.ingredients)
+    .map(([id, amt]) => `${amt * config.allocatedAlembics}x ${RESOURCES[id].icon}`)
+    .join(', ');
 
   let html = `
     <div style="background:${cardBg};border:2px solid ${cardBorder};padding:16px;margin-bottom:16px;border-radius:4px;">
@@ -2100,16 +2105,19 @@ function renderAlembicConfigCard(config, recipe) {
         <span style="font-size:11px;color:var(--text-dim);">${recipe.time}s per cycle</span>
       </div>
 
-      <!-- Allocation Slider -->
+      <!-- Allocation Controls -->
       <div style="margin-bottom:16px;">
-        <label style="font-size:11px;color:var(--text);">
+        <div style="font-size:11px;color:var(--text);margin-bottom:6px;">
           Allocated Alembics: <strong style="color:var(--green);">${config.allocatedAlembics}</strong>/${G.alembicsBuilt}
-        </label>
-        <input type="range" min="0" max="${G.alembicsBuilt}" value="${config.allocatedAlembics}"
-          data-action="allocate-alembics" data-recipe-id="${config.recipeId}"
-          style="width:100%;margin-top:4px;">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn-sm" data-action="allocate-alembics" data-recipe="${config.recipeId}" data-count="${Math.max(0, config.allocatedAlembics - 1)}">-</button>
+          <button class="btn-sm" data-action="allocate-alembics" data-recipe="${config.recipeId}" data-count="${Math.min(G.alembicsBuilt, config.allocatedAlembics + 1)}">+</button>
+          <button class="btn-sm" data-action="allocate-alembics" data-recipe="${config.recipeId}" data-count="0" style="color:var(--red);">None</button>
+          <button class="btn-sm" data-action="allocate-alembics" data-recipe="${config.recipeId}" data-count="${G.alembicsBuilt}" style="color:var(--amber);">Max</button>
+        </div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">
-          Consumes ${consumption}x ${RESOURCES[recipe.ingredients[0].id].icon} → Produces ${production}x ${RESOURCES[recipe.produces[0].id].icon} per cycle
+          Consumes ${ingredientSummary} → Produces ${production}x ${RESOURCES[outputResId].icon} per cycle
         </div>
       </div>
   `;
@@ -2119,19 +2127,19 @@ function renderAlembicConfigCard(config, recipe) {
     html += `<div style="margin-bottom:12px;">
       <div style="font-size:11px;color:var(--amber);margin-bottom:6px;">Input Buffers (Capacity: ${maxCapacity} each)</div>`;
 
-    recipe.ingredients.forEach(ing => {
-      const current = config.inputBuffers[ing.id] || 0;
+    Object.entries(recipe.ingredients).forEach(([id, amount]) => {
+      const current = config.inputBuffers[id] || 0;
       const percent = (current / maxCapacity) * 100;
       html += `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <span style="font-size:11px;min-width:120px;">${RESOURCES[ing.id].icon} ${RESOURCES[ing.id].name}:</span>
+          <span style="font-size:11px;min-width:120px;">${RESOURCES[id].icon} ${RESOURCES[id].name}:</span>
           <div style="flex:1;background:var(--bg);border:1px solid var(--border);height:16px;border-radius:2px;position:relative;overflow:hidden;">
             <div style="position:absolute;top:0;left:0;height:100%;width:${percent}%;background:var(--green);transition:width 0.3s;"></div>
             <span style="position:absolute;top:0;left:4px;font-size:10px;color:var(--text);line-height:16px;">${current}/${maxCapacity}</span>
           </div>
-          <button class="btn-sm" data-action="load-alembic-input" data-recipe-id="${config.recipeId}" data-resource-id="${ing.id}" data-amount="1">+1</button>
-          <button class="btn-sm" data-action="load-alembic-input" data-recipe-id="${config.recipeId}" data-resource-id="${ing.id}" data-amount="10">+10</button>
-          <button class="btn-sm" data-action="load-alembic-input" data-recipe-id="${config.recipeId}" data-resource-id="${ing.id}" data-amount="100">+100</button>
+          <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="1">+1</button>
+          <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="10">+10</button>
+          <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="100">+100</button>
         </div>
       `;
     });
@@ -2141,7 +2149,7 @@ function renderAlembicConfigCard(config, recipe) {
     // Output Buffer
     const outputCurrent = config.outputBuffer.amount;
     const outputPercent = (outputCurrent / maxCapacity) * 100;
-    const outputRes = config.outputBuffer.resourceId || recipe.produces[0].id;
+    const outputRes = config.outputBuffer.resourceId || outputResId;
 
     html += `
       <div style="margin-bottom:12px;">
@@ -2152,7 +2160,7 @@ function renderAlembicConfigCard(config, recipe) {
             <div style="position:absolute;top:0;left:0;height:100%;width:${outputPercent}%;background:var(--purple);transition:width 0.3s;"></div>
             <span style="position:absolute;top:0;left:4px;font-size:10px;color:var(--text);line-height:16px;">${outputCurrent}/${maxCapacity}</span>
           </div>
-          <button class="btn" data-action="collect-alembic-output" data-recipe-id="${config.recipeId}"
+          <button class="btn" data-action="collect-alembic-output" data-recipe="${config.recipeId}"
             style="padding:4px 12px;font-size:11px;" ${outputCurrent === 0 ? 'disabled' : ''}>
             Collect
           </button>
@@ -2180,12 +2188,12 @@ function renderAlembicConfigCard(config, recipe) {
       let statusColor = "var(--text-dim)";
 
       // Check why not crafting
-      const needsInput = recipe.ingredients.some(ing => {
-        const needed = ing.amount * config.allocatedAlembics;
-        return (config.inputBuffers[ing.id] || 0) < needed;
+      const needsInput = Object.entries(recipe.ingredients).some(([id, amount]) => {
+        const needed = amount * config.allocatedAlembics;
+        return (config.inputBuffers[id] || 0) < needed;
       });
 
-      const outputFull = (config.outputBuffer.amount + (recipe.produces[0].amount * config.allocatedAlembics)) > maxCapacity;
+      const outputFull = (config.outputBuffer.amount + (recipe.produces[outputResId] * config.allocatedAlembics)) > maxCapacity;
 
       if (needsInput) {
         status = "⚠️ Waiting for inputs";
