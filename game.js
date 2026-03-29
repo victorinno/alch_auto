@@ -713,8 +713,8 @@ function tickDistiller(now) {
         startDistilling(toQueue, "alchemy");
         return;
       }
-      // Auto-queue divination CK (only after Divination research unlocked)
-      if (G.intelligentGolemsUnlocked && divCk > 0 && divCap > 0) {
+      // Auto-queue divination CK whenever available
+      if (divCk > 0 && divCap > 0) {
         const toQueue = G.autoDistiller ? Math.min(divCk, 5) : 1;
         startDistilling(toQueue, "divination");
         return;
@@ -744,7 +744,7 @@ function tickDistiller(now) {
       if (alkCk > 0 && alkCap > 0) {
         const toQueue = G.autoDistiller ? Math.min(alkCk, 5) : 1;
         startDistilling(toQueue, "alchemy");
-      } else if (G.intelligentGolemsUnlocked && divCk > 0 && divCap > 0) {
+      } else if (divCk > 0 && divCap > 0) {
         const toQueue = G.autoDistiller ? Math.min(divCk, 5) : 1;
         startDistilling(toQueue, "divination");
       }
@@ -1915,16 +1915,17 @@ function renderDistiller() {
         <button class="btn-sm" data-action="distill" data-amount="5" data-type="alchemy" ${ckAvailable < 5 ? 'disabled' : ''}>Alch +5</button>
         <button class="btn-sm" data-action="distill" data-amount="${Math.floor(ckAvailable)}" data-type="alchemy" ${ckAvailable < 1 ? 'disabled' : ''}>Alch Max</button>
       </div>
-      ${G.intelligentGolemsUnlocked ? (() => {
+      ${(() => {
         const divCk = G.resources.condensed_knowledge_divination || 0;
+        if (divCk <= 0) return '';
         return `
         <p style="font-size:10px;margin:8px 0 4px;">Divination CK: <span style="color:#cc44ff;font-weight:bold;">${divCk}🔮💧</span></p>
         <div style="display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="btn-sm" data-action="distill" data-amount="1" data-type="divination" ${divCk < 1 ? 'disabled' : ''} style="border-color:#cc44ff;">Div +1</button>
+          <button class="btn-sm" data-action="distill" data-amount="1" data-type="divination" style="border-color:#cc44ff;">Div +1</button>
           <button class="btn-sm" data-action="distill" data-amount="5" data-type="divination" ${divCk < 5 ? 'disabled' : ''} style="border-color:#cc44ff;">Div +5</button>
-          <button class="btn-sm" data-action="distill" data-amount="${Math.floor(divCk)}" data-type="divination" ${divCk < 1 ? 'disabled' : ''} style="border-color:#cc44ff;">Div Max</button>
+          <button class="btn-sm" data-action="distill" data-amount="${Math.floor(divCk)}" data-type="divination" style="border-color:#cc44ff;">Div Max</button>
         </div>`;
-      })() : ''}
+      })()}
     </div>
   `;
 }
