@@ -18,8 +18,9 @@ const RESOURCES = {
   moonstone:  { name: "Moonstone",       icon: "🌙", color: "#ddeeff" },
   sulfur:     { name: "Sulfur",          icon: "🔥", color: "#ff8800" },
   clay:       { name: "Clay",            icon: "🧱", color: "#cc7744" },
-  condensed_knowledge_alchemy: { name: "Condensed Knowledge (Alchemy)", icon: "💧", color: "#4488ff" },
-  prepared_knowledge_alchemy:  { name: "Prepared Knowledge (Alchemy)",  icon: "⚗️", color: "#aa66ff" },
+  condensed_knowledge_alchemy:    { name: "Alchemy Condensed Knowledge",    icon: "💧", color: "#4488ff" },
+  prepared_knowledge_alchemy:     { name: "Alchemy Prepared Knowledge",     icon: "⚗️", color: "#aa66ff" },
+  condensed_knowledge_divination: { name: "Divination Condensed Knowledge", icon: "🔮💧", color: "#cc44ff" },
   philosophers_draft:          { name: "Philosopher's Draft",           icon: "🧪", color: "#ff6688" },
   soul_crystal:                { name: "Soul Crystal",                  icon: "💠", color: "#ffddff" },
   divination_shard:            { name: "Divination Shard",              icon: "🔮", color: "#cc44ff" },
@@ -159,6 +160,8 @@ const ALCHEMY_RECIPES = [
   { id: "condensed_knowledge", name: "Condensed Knowledge", icon: "💧", ingredients: { philosophers_draft: 1, soul_crystal: 1 }, produces: { condensed_knowledge_alchemy: 5 }, time: 15, unlocked: false, requiresLevel: 3 },
   // Divination — produces shards used to craft intelligent golems
   { id: "divination_brew",     name: "Divination Brew",     icon: "🔮", ingredients: { soul_crystal: 2, moonstone: 3, essence: 10 },                                  produces: { divination_shard: 3 },               time: 25, unlocked: false, requiresLevel: 3 },
+  // Divination Condensed Knowledge — feeds the Divination research pipeline
+  { id: "divination_condensed_knowledge", name: "Divination Condensed Knowledge", icon: "🔮💧", ingredients: { divination_shard: 2, soul_crystal: 1, essence: 8 }, produces: { condensed_knowledge_divination: 3 }, time: 20, unlocked: false, requiresLevel: 3 },
 ];
 
 // ─────────────────────────────────────────────────────
@@ -175,6 +178,7 @@ const RESEARCH_NODES = [
     desc: "Unlocks Alembics - multiply production by assigning multiple units to recipes.",
     icon: "⚗️",
     tier: 0,
+    knowledgeType: "alchemy",
     prerequisites: [],
     baseCost: 50,
     infinite: false,
@@ -195,12 +199,12 @@ const RESEARCH_NODES = [
     desc: "Reduce distillation time by 5% per level.",
     icon: "⚡",
     tier: 1,
+    knowledgeType: "alchemy",
     prerequisites: [],
-    baseCost: 100, // points
+    baseCost: 100,
     infinite: true,
     maxLevel: Infinity,
     effect: (level) => {
-      // Apply 5% speed boost per level
       if (G.distiller) {
         G.distiller.speedMultiplier = 1 - (level * 0.05);
       }
@@ -212,6 +216,7 @@ const RESEARCH_NODES = [
     desc: "Each Prepared Knowledge gives +10% more points per level.",
     icon: "📈",
     tier: 1,
+    knowledgeType: "alchemy",
     prerequisites: [],
     baseCost: 100,
     infinite: true,
@@ -226,6 +231,7 @@ const RESEARCH_NODES = [
     desc: "Alchemy recipes complete 3% faster per level.",
     icon: "🔥",
     tier: 1,
+    knowledgeType: "alchemy",
     prerequisites: [],
     baseCost: 100,
     infinite: true,
@@ -240,25 +246,27 @@ const RESEARCH_NODES = [
     desc: "Alchemy recipes have +1% productivity per level (every 100% = +1 free item).",
     icon: "🎁",
     tier: 1,
+    knowledgeType: "alchemy",
     prerequisites: [],
     baseCost: 100,
     infinite: true,
     maxLevel: Infinity,
     effect: (level) => {
-      G.alchemyProductivityBonus = level; // Stored as percentage
+      G.alchemyProductivityBonus = level;
     }
   },
 
   // ═══════════════════════════════════════════════════
-  // TIER 2 — One-Time Unlocks (2 nodes)
+  // TIER 2 — One-Time Unlocks
   // ═══════════════════════════════════════════════════
   {
     id: "auto_distiller",
     name: "Automated Distillery",
-    desc: "Distiller automatically processes Condensed Knowledge when available.",
+    desc: "Distiller automatically processes both Condensed Knowledge types when available.",
     icon: "🤖",
     tier: 2,
-    prerequisites: ["distiller_speed"], // Requires at least 1 level in Distiller Efficiency
+    knowledgeType: "alchemy",
+    prerequisites: ["distiller_speed"],
     baseCost: 500,
     infinite: false,
     maxLevel: 1,
@@ -272,7 +280,8 @@ const RESEARCH_NODES = [
     desc: "Automatically starts next research in queue when current completes.",
     icon: "🧠",
     tier: 2,
-    prerequisites: ["injection_points"], // Requires at least 1 level in Knowledge Amplification
+    knowledgeType: "alchemy",
+    prerequisites: ["injection_points"],
     baseCost: 500,
     infinite: false,
     maxLevel: 1,
@@ -283,9 +292,10 @@ const RESEARCH_NODES = [
   {
     id: "divination",
     name: "Divination",
-    desc: "Imbue golems with intelligence. Unlocks Feeder and Carrier Golems that automate Alembic supply chains.",
+    desc: "Imbue golems with intelligence. Unlocks Feeder and Carrier Golems. Requires both Alchemy PK and Divination PK to research.",
     icon: "🔮",
     tier: 2,
+    knowledgeType: "divination",
     prerequisites: ["alembic_automation"],
     baseCost: 800,
     infinite: false,
@@ -349,7 +359,8 @@ const G = {
   // Starting resources: enough clay+herbs to craft 1st golem immediately
   resources: {
     gold: 5, essence: 0, herbs: 5, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 8,
-    condensed_knowledge_alchemy: 0, prepared_knowledge_alchemy: 0, philosophers_draft: 0, soul_crystal: 0, divination_shard: 0
+    condensed_knowledge_alchemy: 0, prepared_knowledge_alchemy: 0, philosophers_draft: 0, soul_crystal: 0,
+    divination_shard: 0, condensed_knowledge_divination: 0
   },
   golems: [],
   nextGolemId: 1,
@@ -643,7 +654,8 @@ function buildInjector() {
   G.injector = {
     built: true,
     capacity: 100,
-    currentAmount: 0
+    currentAmount: 0,
+    divinationAmount: 0
   };
 
   log("💉 Injector built! Can now store Prepared Knowledge for research.", "great");
@@ -652,7 +664,7 @@ function buildInjector() {
 }
 
 // Distiller Processing Functions
-function startDistilling(ckAmount) {
+function startDistilling(ckAmount, type = "alchemy") {
   if (!G.distiller || !G.distiller.built) {
     log("Distiller not built yet!", "warn");
     return;
@@ -661,30 +673,25 @@ function startDistilling(ckAmount) {
     log("Distiller queue is full (max 5)!", "warn");
     return;
   }
-  if (G.resources.condensed_knowledge_alchemy < ckAmount) {
-    log("Not enough Condensed Knowledge!", "warn");
+  const resourceKey = type === "divination" ? "condensed_knowledge_divination" : "condensed_knowledge_alchemy";
+  if ((G.resources[resourceKey] || 0) < ckAmount) {
+    log(`Not enough ${type === "divination" ? "Divination" : "Alchemy"} Condensed Knowledge!`, "warn");
     return;
   }
 
-  // Deduct CK from resources
-  G.resources.condensed_knowledge_alchemy -= ckAmount;
+  G.resources[resourceKey] -= ckAmount;
 
   const processingTime = G.distiller.baseProcessingTime * G.distiller.speedMultiplier;
   const now = Date.now();
-  const job = {
-    ckAmount,
-    startTime: now,
-    endTime: now + processingTime
-  };
+  const job = { ckAmount, type, startTime: now, endTime: now + processingTime };
 
   G.distiller.processingQueue.push(job);
 
-  // Start processing if nothing is currently processing
   if (!G.distiller.currentProcessing) {
     G.distiller.currentProcessing = G.distiller.processingQueue.shift();
   }
 
-  log(`🔬 Distilling ${ckAmount} Condensed Knowledge...`, "info");
+  log(`🔬 Distilling ${ckAmount} ${type === "divination" ? "Divination" : "Alchemy"} Condensed Knowledge...`, "info");
   saveGame();
   renderResearchLab();
 }
@@ -692,44 +699,54 @@ function startDistilling(ckAmount) {
 function tickDistiller(now) {
   if (!G.distiller || !G.distiller.built) return;
 
-  // Auto-start processing if idle and CK is available (but only if Injector is built)
+  // Auto-start processing if idle and CK is available
   if (!G.distiller.currentProcessing && G.distiller.processingQueue.length === 0) {
-    // Check if Injector is built before auto-processing
     if (G.injector && G.injector.built) {
-      const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
-      const availableCapacity = G.injector.capacity - G.injector.currentAmount;
-      if (ckAvailable > 0 && availableCapacity > 0) {
-        // Auto-queue CK (1 at a time, or all if auto-distiller research is unlocked)
-        const toQueue = G.autoDistiller ? Math.min(ckAvailable, 5) : 1;
-        startDistilling(toQueue);
-        return; // startDistilling will handle starting the first one
+      const alkCk = G.resources.condensed_knowledge_alchemy || 0;
+      const alkCap = G.injector.capacity - G.injector.currentAmount;
+      const divCk = G.resources.condensed_knowledge_divination || 0;
+      const divCap = G.injector.capacity - (G.injector.divinationAmount || 0);
+
+      // Auto-queue alchemy CK
+      if (alkCk > 0 && alkCap > 0) {
+        const toQueue = G.autoDistiller ? Math.min(alkCk, 5) : 1;
+        startDistilling(toQueue, "alchemy");
+        return;
+      }
+      // Auto-queue divination CK (only after Divination research unlocked)
+      if (G.intelligentGolemsUnlocked && divCk > 0 && divCap > 0) {
+        const toQueue = G.autoDistiller ? Math.min(divCk, 5) : 1;
+        startDistilling(toQueue, "divination");
+        return;
       }
     }
   }
 
   if (!G.distiller.currentProcessing) return;
 
-  // Check if current processing is complete
   if (now >= G.distiller.currentProcessing.endTime) {
     completeDistilling();
 
-    // After completing, try to auto-start next processing
-    // First check if there's anything in queue
     if (G.distiller.processingQueue.length > 0 && G.injector && G.injector.built) {
-      const availableCapacity = G.injector.capacity - G.injector.currentAmount;
-      // Only start next job if there's room in the Injector
-      if (availableCapacity > 0) {
+      const job = G.distiller.processingQueue[0];
+      const cap = job.type === "divination"
+        ? G.injector.capacity - (G.injector.divinationAmount || 0)
+        : G.injector.capacity - G.injector.currentAmount;
+      if (cap > 0) {
         G.distiller.currentProcessing = G.distiller.processingQueue.shift();
       }
-    }
-    // If queue is empty, check if we should auto-queue more CK
-    else if (G.injector && G.injector.built) {
-      const ckAvailable = G.resources.condensed_knowledge_alchemy || 0;
-      const availableCapacity = G.injector.capacity - G.injector.currentAmount;
-      if (ckAvailable > 0 && availableCapacity > 0) {
-        // Auto-queue CK (1 at a time, or all if auto-distiller research is unlocked)
-        const toQueue = G.autoDistiller ? Math.min(ckAvailable, 5) : 1;
-        startDistilling(toQueue);
+    } else if (G.injector && G.injector.built) {
+      const alkCk = G.resources.condensed_knowledge_alchemy || 0;
+      const alkCap = G.injector.capacity - G.injector.currentAmount;
+      const divCk = G.resources.condensed_knowledge_divination || 0;
+      const divCap = G.injector.capacity - (G.injector.divinationAmount || 0);
+
+      if (alkCk > 0 && alkCap > 0) {
+        const toQueue = G.autoDistiller ? Math.min(alkCk, 5) : 1;
+        startDistilling(toQueue, "alchemy");
+      } else if (G.intelligentGolemsUnlocked && divCk > 0 && divCap > 0) {
+        const toQueue = G.autoDistiller ? Math.min(divCk, 5) : 1;
+        startDistilling(toQueue, "divination");
       }
     }
   }
@@ -749,13 +766,15 @@ function completeDistilling() {
     return;
   }
 
-  const availableCapacity = G.injector.capacity - G.injector.currentAmount;
+  const jobType = G.distiller.currentProcessing.type || "alchemy";
+  const isDivination = jobType === "divination";
+  const currentPool = isDivination ? (G.injector.divinationAmount || 0) : G.injector.currentAmount;
+  const availableCapacity = G.injector.capacity - currentPool;
+
   if (pkProduced > availableCapacity) {
     // Injector doesn't have enough space - wait for research to consume some PK
-    // Keep currentProcessing so we can retry next tick
-    // Only log once to avoid spam
     if (!G.distiller.waitingForSpace) {
-      log(`⚠️ Distillation complete, but Injector is full! Waiting for space... (${G.injector.currentAmount}/${G.injector.capacity})`, "warn");
+      log(`⚠️ Distillation complete, but Injector ${isDivination ? "Divination" : "Alchemy"} pool is full! Waiting for space...`, "warn");
       G.distiller.waitingForSpace = true;
     }
     renderResearchLab();
@@ -768,15 +787,21 @@ function completeDistilling() {
     log(`✅ Injector has space again, continuing distillation...`, "info");
   }
 
-  // Add PK to injector
-  G.injector.currentAmount += pkProduced;
+  // Add PK to the correct pool
+  if (isDivination) {
+    G.injector.divinationAmount = (G.injector.divinationAmount || 0) + pkProduced;
+  } else {
+    G.injector.currentAmount += pkProduced;
+  }
   G.distiller.currentProcessing = null;
 
   // Track total processed
   if (!G.distiller.totalProcessed) G.distiller.totalProcessed = 0;
   G.distiller.totalProcessed += ckAmount;
 
-  log(`✅ Distilled ${ckAmount} CK → ${pkProduced} PK. Injector: ${G.injector.currentAmount}/${G.injector.capacity} PK`, "good");
+  const poolLabel = isDivination ? "Div PK" : "Alchemy PK";
+  const poolAmount = isDivination ? G.injector.divinationAmount : G.injector.currentAmount;
+  log(`✅ Distilled ${ckAmount} ${isDivination ? "Div CK" : "CK"} → ${pkProduced} ${poolLabel}. Injector: ${poolAmount}/${G.injector.capacity}`, "good");
 
   saveGame();
   renderResearchLab();
@@ -870,7 +895,16 @@ function startNextResearch() {
 function tickResearch(now) {
   if (!G.activeResearch) return;
   if (!G.injector || !G.injector.built) return;
-  if (G.injector.currentAmount <= 0) return; // No PK available
+
+  const resNode = RESEARCH_NODES.find(n => n.id === G.activeResearch.nodeId);
+  const isDivinationNode = resNode && resNode.knowledgeType === "divination";
+
+  if (isDivinationNode) {
+    // Divination nodes require both alchemy PK and divination PK
+    if (G.injector.currentAmount <= 0 || (G.injector.divinationAmount || 0) <= 0) return;
+  } else {
+    if (G.injector.currentAmount <= 0) return;
+  }
 
   // Consume PK automatically over time
   // Rate: 1 PK per second = 10 points per second
@@ -878,12 +912,18 @@ function tickResearch(now) {
   const secondsElapsed = timeSinceLastTick / 1000;
 
   if (secondsElapsed >= 1) { // Consume 1 PK per second
-    const pkToConsume = Math.min(1, G.injector.currentAmount);
-    const basePoints = 10;
-    const pointsGained = Math.floor(pkToConsume * basePoints * G.injectionPointsMult);
-
-    // Deduct PK from injector
-    G.injector.currentAmount -= pkToConsume;
+    let pkToConsume, pointsGained;
+    if (isDivinationNode) {
+      pkToConsume = Math.min(1, G.injector.currentAmount, G.injector.divinationAmount || 0);
+      if (pkToConsume <= 0) return;
+      G.injector.currentAmount -= pkToConsume;
+      G.injector.divinationAmount = (G.injector.divinationAmount || 0) - pkToConsume;
+      pointsGained = Math.floor(pkToConsume * 10 * G.injectionPointsMult);
+    } else {
+      pkToConsume = Math.min(1, G.injector.currentAmount);
+      pointsGained = Math.floor(pkToConsume * 10 * G.injectionPointsMult);
+      G.injector.currentAmount -= pkToConsume;
+    }
 
     // Add points to research
     G.activeResearch.pointsAccumulated += pointsGained;
@@ -1869,13 +1909,22 @@ function renderDistiller() {
       ${statusHtml}
       ${queueHtml}
       ${statsHtml}
-      <p style="font-size:10px;margin:8px 0;">CK Available: <span style="color:var(--amber);font-weight:bold;">${ckAvailable}💧</span></p>
-      <div style="display:flex;gap:4px;margin-top:8px;">
-        <button class="btn-sm" data-action="distill" data-amount="1" ${ckAvailable < 1 ? 'disabled' : ''}>+1</button>
-        <button class="btn-sm" data-action="distill" data-amount="5" ${ckAvailable < 5 ? 'disabled' : ''}>+5</button>
-        <button class="btn-sm" data-action="distill" data-amount="10" ${ckAvailable < 10 ? 'disabled' : ''}>+10</button>
-        <button class="btn-sm" data-action="distill" data-amount="${Math.floor(ckAvailable)}" ${ckAvailable < 1 ? 'disabled' : ''}>Max</button>
+      <p style="font-size:10px;margin:8px 0;">Alchemy CK: <span style="color:var(--amber);font-weight:bold;">${ckAvailable}💧</span></p>
+      <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;">
+        <button class="btn-sm" data-action="distill" data-amount="1" data-type="alchemy" ${ckAvailable < 1 ? 'disabled' : ''}>Alch +1</button>
+        <button class="btn-sm" data-action="distill" data-amount="5" data-type="alchemy" ${ckAvailable < 5 ? 'disabled' : ''}>Alch +5</button>
+        <button class="btn-sm" data-action="distill" data-amount="${Math.floor(ckAvailable)}" data-type="alchemy" ${ckAvailable < 1 ? 'disabled' : ''}>Alch Max</button>
       </div>
+      ${G.intelligentGolemsUnlocked ? (() => {
+        const divCk = G.resources.condensed_knowledge_divination || 0;
+        return `
+        <p style="font-size:10px;margin:8px 0 4px;">Divination CK: <span style="color:#cc44ff;font-weight:bold;">${divCk}🔮💧</span></p>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="btn-sm" data-action="distill" data-amount="1" data-type="divination" ${divCk < 1 ? 'disabled' : ''} style="border-color:#cc44ff;">Div +1</button>
+          <button class="btn-sm" data-action="distill" data-amount="5" data-type="divination" ${divCk < 5 ? 'disabled' : ''} style="border-color:#cc44ff;">Div +5</button>
+          <button class="btn-sm" data-action="distill" data-amount="${Math.floor(divCk)}" data-type="divination" ${divCk < 1 ? 'disabled' : ''} style="border-color:#cc44ff;">Div Max</button>
+        </div>`;
+      })() : ''}
     </div>
   `;
 }
@@ -1901,41 +1950,55 @@ function renderInjector() {
 
   // Injector is built - show status and controls
   const { capacity, currentAmount } = G.injector;
+  const divAmount = G.injector.divinationAmount || 0;
   const pct = (currentAmount / capacity) * 100;
   const fillColor = pct > 90 ? "var(--red)" : pct > 60 ? "var(--amber)" : "var(--green)";
+  const divPct = (divAmount / capacity) * 100;
+  const divFillColor = divPct > 90 ? "var(--red)" : divPct > 60 ? "var(--amber)" : "#cc44ff";
+
+  const resNode = G.activeResearch ? RESEARCH_NODES.find(n => n.id === G.activeResearch.nodeId) : null;
+  const isDivinationActive = resNode && resNode.knowledgeType === "divination";
 
   let statusHtml = "";
   let activeIndicator = "";
 
-  if (G.activeResearch && currentAmount > 0) {
+  const isInjecting = G.activeResearch && (isDivinationActive ? (currentAmount > 0 && divAmount > 0) : currentAmount > 0);
+  if (isInjecting) {
     const lastTick = G.activeResearch.lastTickTime || Date.now();
     const timeSinceLastConsume = (Date.now() - lastTick) / 1000;
     const nextConsumeIn = Math.max(0, 1 - timeSinceLastConsume).toFixed(1);
     activeIndicator = '<p style="font-size:10px;color:var(--green);margin:4px 0;animation:pulse 1.5s infinite;">🔄 ACTIVELY INJECTING</p>';
+    const consumeDesc = isDivinationActive ? "1 Alchemy PK + 1 Divination PK" : "1 Alchemy PK";
     statusHtml = `
       <div style="padding:6px;background:rgba(57,255,20,0.1);border:1px solid var(--green);border-radius:4px;margin:8px 0;">
-        <p style="font-size:10px;color:var(--green);margin:2px 0;">⚡ Consuming 1 PK every second</p>
+        <p style="font-size:10px;color:var(--green);margin:2px 0;">⚡ Consuming ${consumeDesc} per second</p>
         <p style="font-size:9px;color:var(--text-dim);margin:2px 0;">Next consumption in ${nextConsumeIn}s</p>
         <p style="font-size:9px;color:var(--green);margin:2px 0;">→ Generating ${10 * G.injectionPointsMult} points/sec</p>
       </div>
     `;
-  } else if (G.activeResearch && currentAmount === 0) {
-    statusHtml = '<p style="font-size:10px;color:var(--amber);margin:8px 0;padding:6px;background:rgba(255,179,0,0.1);border:1px solid var(--amber);border-radius:4px;">⚠️ Waiting for Distiller to produce PK...</p>';
+  } else if (G.activeResearch && !isInjecting) {
+    const missing = isDivinationActive && currentAmount === 0 ? "Alchemy PK" : isDivinationActive && divAmount === 0 ? "Divination PK" : "PK";
+    statusHtml = `<p style="font-size:10px;color:var(--amber);margin:8px 0;padding:6px;background:rgba(255,179,0,0.1);border:1px solid var(--amber);border-radius:4px;">⚠️ Waiting for ${missing} from Distiller...</p>`;
   } else if (!G.activeResearch) {
     statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Queue research to start consuming PK</p>';
   } else {
     statusHtml = '<p style="font-size:10px;color:var(--text-dim);margin:8px 0;">💤 Idle</p>';
   }
 
-  // Show consumption rate info
   const rateInfo = `<p style="font-size:9px;color:var(--text-dim);margin:4px 0;font-weight:bold;">Rate: 1 PK/sec = ${10 * G.injectionPointsMult} points/sec</p>`;
 
+  const divPoolHtml = G.intelligentGolemsUnlocked ? `
+    <p style="font-size:11px;margin:6px 0;">Divination PK: <span style="color:${divFillColor};font-weight:bold;">${divAmount}</span>/${capacity} 🔮</p>
+    <div class="progress-bar" style="height:8px;margin-bottom:8px;"><div class="progress-fill" style="width:${divPct}%;background:${divFillColor}"></div></div>
+  ` : '';
+
   return `
-    <div class="machine-card" style="border:2px solid ${G.activeResearch && currentAmount > 0 ? 'var(--green)' : 'var(--border)'};">
+    <div class="machine-card" style="border:2px solid ${isInjecting ? 'var(--green)' : 'var(--border)'};">
       <h4>💉 Injector</h4>
       ${activeIndicator}
-      <p style="font-size:11px;margin:6px 0;font-weight:bold;">Stored: <span style="color:${fillColor}">${currentAmount}</span>/${capacity} ⚗️</p>
-      <div class="progress-bar" style="height:12px;"><div class="progress-fill" style="width:${pct}%;background:${fillColor}"></div></div>
+      <p style="font-size:11px;margin:6px 0;">Alchemy PK: <span style="color:${fillColor};font-weight:bold;">${currentAmount}</span>/${capacity} ⚗️</p>
+      <div class="progress-bar" style="height:8px;margin-bottom:4px;"><div class="progress-fill" style="width:${pct}%;background:${fillColor}"></div></div>
+      ${divPoolHtml}
       ${rateInfo}
       ${statusHtml}
     </div>
@@ -2977,6 +3040,7 @@ function loadGame() {
     const save = JSON.parse(raw);
     Object.assign(G.resources, save.resources||{});
     if (G.resources.divination_shard === undefined) G.resources.divination_shard = 0;
+    if (G.resources.condensed_knowledge_divination === undefined) G.resources.condensed_knowledge_divination = 0;
     G.golems           = (save.golems||[]).map(g => ({
       ...g,
       upgrades: g.upgrades || [],
@@ -3051,6 +3115,7 @@ function loadGame() {
     // Restore Research Lab State
     G.distiller = save.distiller || null;
     G.injector = save.injector || null;
+    if (G.injector && G.injector.divinationAmount === undefined) G.injector.divinationAmount = 0;
     G.activeResearch = save.activeResearch || null;
     G.researchQueue = save.researchQueue || [];
     G.researchNodes = save.researchNodes || {};
@@ -3301,7 +3366,7 @@ function setupEventDelegation() {
     } else if (action === 'hide-researchlab') { hideResearchLab();
     } else if (action === 'build-distiller')  { buildDistiller();
     } else if (action === 'build-injector')   { buildInjector();
-    } else if (action === 'distill')          { startDistilling(Number(btn.dataset.amount));
+    } else if (action === 'distill')          { startDistilling(Number(btn.dataset.amount), btn.dataset.type || "alchemy");
     } else if (action === 'queue-research')   { queueResearch(btn.dataset.nodeId);
     } else if (action === 'cancel-research')  { cancelActiveResearch();
     } else if (action === 'remove-from-queue') { removeFromQueue(btn.dataset.nodeId);
