@@ -15,7 +15,8 @@
       "Bash(node:*)",
       "Bash(npx playwright test:*)",
       "Bash(timeout 60 tail:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(echo \"EXIT:$?\")"
     ],
     "deny": [],
     "ask": []
