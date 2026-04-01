@@ -139,8 +139,10 @@ const GOLEM_TYPES = {
   // Tier 4 — needs moonstone + essence
   moon:    { name: "Moon Golem",    tier: 4, ascii: " (^v^) \n {___} \n  | | ", speed: 3,  capacity: 18, danger_resist: 3, cost: { moonstone: 8, essence: 15, gold: 200 },        unlock: 3 },
   // Tier 5 — Intelligent Golems (require Divination research)
-  feeder:  { name: "Feeder Golem",  tier: 5, ascii: " (^_^) \n [   ] \n  | | ", speed: 5,  capacity: 10, danger_resist: 0, cost: { divination_shard: 2, clay: 5, essence: 8 },   unlock: 0, role: "feeder"  },
-  carrier: { name: "Carrier Golem", tier: 5, ascii: " (~_~) \n [___] \n  | | ", speed: 5,  capacity: 20, danger_resist: 1, cost: { divination_shard: 2, iron: 4, crystals: 6 },  unlock: 1, role: "carrier" },
+  feeder:   { name: "Feeder Golem",   tier: 5, ascii: " (^_^) \n [   ] \n  | | ", speed: 5, capacity: 10, danger_resist: 0, cost: { divination_shard: 2, clay: 5, essence: 8 },        unlock: 0, role: "feeder"   },
+  carrier:  { name: "Carrier Golem",  tier: 5, ascii: " (~_~) \n [___] \n  | | ", speed: 5, capacity: 20, danger_resist: 1, cost: { divination_shard: 2, iron: 4, crystals: 6 },       unlock: 1, role: "carrier"  },
+  // Tier 5 — Explorer Golems (require Expedition Mastery research)
+  explorer: { name: "Explorer Golem", tier: 5, ascii: " (>_<) \n [=X=] \n  | | ", speed: 5, capacity: 15, danger_resist: 0, cost: { divination_shard: 3, moonstone: 2, essence: 12 }, unlock: 2, role: "explorer" },
 };
 
 const ALCHEMY_RECIPES = [
@@ -320,6 +322,24 @@ const RESEARCH_NODES = [
       log('🔮 Divination unlocked! Craft Feeder and Carrier Golems to automate your Alembics.', 'great');
       renderRecipes();
     }
+  },
+  {
+    id: "explorer_golem",
+    name: "Expedition Mastery",
+    desc: "Unlock Explorer Golems — dispatchers that automatically send regular golems to gather tracked resources.",
+    icon: "🧭",
+    tier: 2,
+    knowledgeType: "divination",
+    prerequisites: ["divination"],
+    baseCost: 1200,
+    infinite: false,
+    maxLevel: 1,
+    effect: (level) => {
+      G.explorerGolemsUnlocked = true;
+      log('🧭 Expedition Mastery unlocked! Craft Explorer Golems to automate zone gathering.', 'great');
+      renderRecipes();
+      renderExpeditionBtn();
+    }
   }
 ];
 
@@ -410,6 +430,7 @@ const G = {
   autoDistiller: false,         // Tier 2 research unlock
   autoResearch: false,          // Tier 2 research unlock
   intelligentGolemsUnlocked: false, // Divination research unlock
+  explorerGolemsUnlocked: false,    // Expedition Mastery research unlock
 
   // Alembic Automation State
   alembicsUnlocked: false,      // Unlocked via research
@@ -1067,6 +1088,8 @@ function showResearchLab() {
 
   // Hide main UI
   document.getElementById("main-layout").style.display = "none";
+  document.getElementById("alembic-panel").style.display = "none";
+  document.getElementById("expedition-panel").style.display = "none";
 
   // Show research lab panel
   const panel = document.getElementById("researchlab-panel");
@@ -1317,6 +1340,8 @@ function craftGolem(typeId) {
   const def = GOLEM_TYPES[typeId];
   if (!def) return;
   if (G.workshopLevel < def.unlock) { log(`Workshop level ${def.unlock} required!`, "warn"); return; }
+  if ((def.role === "feeder" || def.role === "carrier") && !G.intelligentGolemsUnlocked) { log("Divination research required to craft intelligent golems.", "warn"); return; }
+  if (def.role === "explorer" && !G.explorerGolemsUnlocked) { log("Expedition Mastery research required to craft Explorer Golems.", "warn"); return; }
   const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
   if (G.golems.length >= maxGolems) { log("Golem dock is full! Upgrade workshop.", "warn"); return; }
   if (!canAfford(def.cost, G.craftCostMult)) { log(`Not enough resources to craft ${def.name}.`, "warn"); return; }
@@ -1329,7 +1354,10 @@ function craftGolem(typeId) {
     bonus_capacity: 0,     // extra carry slots from upgrades
     speed_mult: 1.0,       // travel speed multiplier from upgrades
     targetRecipeId: null,  // for feeder/carrier: which Alembic recipe to supply
-    alembicSlot: null      // specific slot assigned to: resourceId string (input) or 'output', or null
+    alembicSlot: null,     // specific slot assigned to: resourceId string (input) or 'output', or null
+    trackedResources: [],        // for explorer: up to 2 resourceIds to track [slot0, slot1]
+    dispatchedByExplorerId: null, // for regular golems dispatched by an explorer
+    dispatchedForSlot: null       // which explorer slot (0 or 1) dispatched this golem
   };
   G.golems.push(golem);
   log(`✨ Crafted ${golem.name}!`, "great");
@@ -1347,7 +1375,7 @@ function assignGolemToZone(golemId, zoneId) {
   if (!golem || !zone) return;
   if (golem.state !== "idle") { log(`${golem.name} is busy!`, "warn"); return; }
   const def = GOLEM_TYPES[golem.typeId];
-  if (def.role === "feeder" || def.role === "carrier") { log(`${golem.name} is a workshop golem — assign it to an Alembic recipe instead.`, "warn"); return; }
+  if (def.role === "feeder" || def.role === "carrier" || def.role === "explorer") { log(`${golem.name} cannot be sent to zones directly.`, "warn"); return; }
   if (zone.danger > golem.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}! Needs Danger Resist ${zone.danger} (has ${golem.danger_resist}). Upgrade it first!`, "warn"); return; }
   if (golemsInZone(zoneId).length >= zone.maxSlots) { log(`${zone.name} is full! (${zone.maxSlots} slots)`, "warn"); return; }
   const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
@@ -1652,6 +1680,44 @@ function tickGolems(now) {
       continue;
     }
 
+    // ── Explorer Golem: dispatches idle regular golems for tracked resources ──
+    if (def.role === "explorer") {
+      for (let slot = 0; slot < 2; slot++) {
+        const resourceId = golem.trackedResources[slot];
+        if (!resourceId) continue;
+        // Already a golem in-flight for this slot?
+        const inFlight = G.golems.some(g =>
+          g.dispatchedByExplorerId === golem.id && g.dispatchedForSlot === slot && g.state !== 'idle'
+        );
+        if (inFlight) continue;
+        // Safest zone yielding this resource (not depleted)
+        const eligibleZones = ZONES
+          .filter(z => z.yields.includes(resourceId) && (!z.resourcePool || z.resourcePool.total > 0))
+          .sort((a, b) => a.danger - b.danger);
+        if (eligibleZones.length === 0) continue;
+        const targetZone = eligibleZones[0];
+        if (golemsInZone(targetZone.id).length >= targetZone.maxSlots) continue;
+        // Idle regular golem with lowest danger_resist that qualifies
+        const candidate = G.golems
+          .filter(g => {
+            const gDef = GOLEM_TYPES[g.typeId];
+            return !gDef.role && g.state === 'idle' && !g.dispatchedByExplorerId && g.danger_resist >= targetZone.danger;
+          })
+          .sort((a, b) => a.danger_resist - b.danger_resist)[0];
+        if (!candidate) continue;
+        // Dispatch
+        candidate.dispatchedByExplorerId = golem.id;
+        candidate.dispatchedForSlot = slot;
+        const cDef = GOLEM_TYPES[candidate.typeId];
+        const cSpeed = cDef.speed * G.golemSpeedMult * (candidate.speed_mult || 1.0);
+        candidate.state = "traveling"; candidate.zoneId = targetZone.id; candidate.tripPhase = "out";
+        candidate.tripStart = now; candidate.tripEnd = now + cSpeed * 1000; candidate.collected = {};
+        log(`🧭 ${golem.name} dispatched ${candidate.name} → ${targetZone.name} for ${RESOURCES[resourceId].icon}`, "info");
+        stateChanged = true;
+      }
+      continue;
+    }
+
     if (golem.state === "idle") continue;
     const zone = ZONES.find(z => z.id === golem.zoneId);
     const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
@@ -1710,6 +1776,7 @@ function tickGolems(now) {
 
       log(`✅ ${golem.name} returned: ${summary.join(" ")}`, "good");
       golem.state = "idle"; golem.zoneId = null; golem.tripPhase = null; golem.collected = {};
+      golem.dispatchedByExplorerId = null; golem.dispatchedForSlot = null;
       renderZones();
       renderGolemRoster();
       renderResources(); renderRecipes(); renderAlchemy(); stateChanged = true;
@@ -2650,6 +2717,7 @@ function showAlembicPanel() {
   document.getElementById("main-layout").style.display = "none";
   document.getElementById("worldmap-panel").style.display = "none";
   document.getElementById("researchlab-panel").style.display = "none";
+  document.getElementById("expedition-panel").style.display = "none";
 
   // Show alembic panel
   const panel = document.getElementById("alembic-panel");
@@ -2660,14 +2728,112 @@ function showAlembicPanel() {
 
 function hideAlembicPanel() {
   G.currentView = "workshop";
-
-  // Hide alembic panel
   document.getElementById("alembic-panel").style.display = "none";
-
-  // Show main UI
   document.getElementById("main-layout").style.display = "grid";
-
   renderAll();
+}
+
+// ─────────────────────────────────────────────────────
+// EXPEDITION PANEL — Explorer Golem Management
+// ─────────────────────────────────────────────────────
+
+function renderExpeditionBtn() {
+  const btn = document.getElementById("expedition-btn");
+  if (btn) btn.style.display = G.explorerGolemsUnlocked ? "block" : "none";
+}
+
+function showExpeditionPanel() {
+  G.currentView = "expeditions";
+  document.getElementById("main-layout").style.display = "none";
+  document.getElementById("worldmap-panel").style.display = "none";
+  document.getElementById("researchlab-panel").style.display = "none";
+  document.getElementById("alembic-panel").style.display = "none";
+  document.getElementById("expedition-panel").style.display = "block";
+  renderExpeditionPanel();
+}
+
+function hideExpeditionPanel() {
+  G.currentView = "workshop";
+  document.getElementById("expedition-panel").style.display = "none";
+  document.getElementById("main-layout").style.display = "grid";
+  renderAll();
+}
+
+function setExplorerResource(explorerId, slot, resourceId) {
+  const golem = G.golems.find(g => g.id == explorerId);
+  if (!golem || GOLEM_TYPES[golem.typeId]?.role !== 'explorer') return;
+  golem.trackedResources[slot] = resourceId || null;
+  saveGame();
+  renderExpeditionPanel();
+}
+
+function renderExpeditionPanel() {
+  const panel = document.getElementById("expedition-panel");
+  if (!panel || G.currentView !== "expeditions") return;
+
+  const explorers = G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'explorer');
+
+  // Build list of resource IDs that appear in at least one zone
+  const gatherableResources = [...new Set(ZONES.flatMap(z => z.yields))];
+
+  const stateLabels = { idle: "Idle", traveling: "🚶 Traveling", gathering: "⛏️ Gathering" };
+
+  let cards = '';
+  if (explorers.length === 0) {
+    cards = `<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px;">
+      No Explorer Golems yet. Craft one in the Workshop.
+    </div>`;
+  } else {
+    cards = explorers.map(golem => {
+      const slotRows = [0, 1].map(slot => {
+        const tracked = golem.trackedResources[slot] || '';
+        const options = `<option value="">— None —</option>` +
+          gatherableResources.map(rId => {
+            const r = RESOURCES[rId];
+            return `<option value="${rId}" ${tracked === rId ? 'selected' : ''}>${r.icon} ${r.name}</option>`;
+          }).join('');
+
+        // Find in-flight golem for this slot
+        const dispatched = G.golems.find(g =>
+          g.dispatchedByExplorerId === golem.id && g.dispatchedForSlot === slot && g.state !== 'idle'
+        );
+        const dispatchedHtml = dispatched
+          ? `<span style="font-size:10px;color:var(--green);margin-left:8px;">${dispatched.name} — ${stateLabels[dispatched.state] || dispatched.state}</span>`
+          : `<span style="font-size:10px;color:var(--text-dim);margin-left:8px;">Waiting for idle golem…</span>`;
+
+        return `
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+            <span style="font-size:10px;color:var(--text-dim);min-width:40px;">Slot ${slot + 1}:</span>
+            <select data-action="set-explorer-resource" data-explorer="${golem.id}" data-slot="${slot}"
+              style="background:var(--bg2);color:var(--text);border:1px solid var(--border);font-size:10px;flex:1;">
+              ${options}
+            </select>
+            ${tracked ? dispatchedHtml : ''}
+          </div>`;
+      }).join('');
+
+      return `
+        <div style="border:1px solid var(--green);padding:10px 12px;margin-bottom:12px;background:var(--bg3);border-radius:4px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="font-size:12px;color:var(--green);flex:1;">🧭 ${golem.name}</span>
+            <button class="btn-sm" data-action="destroy-golem" data-golem="${golem.id}"
+              style="color:var(--red);font-size:10px;">✕ Dismantle</button>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);">Tracks up to 2 resources — dispatches idle golems automatically</div>
+          ${slotRows}
+        </div>`;
+    }).join('');
+  }
+
+  panel.innerHTML = `
+    <div style="max-width:800px;margin:0 auto;padding:20px;">
+      <button class="btn" data-action="hide-expeditions" style="margin-bottom:10px;">← Back to Workshop</button>
+      <h2 style="text-align:center;color:var(--green);margin-bottom:10px;">⚔️ Expeditions</h2>
+      <p style="text-align:center;color:var(--text-dim);font-size:11px;margin-bottom:20px;">
+        Each Explorer Golem tracks up to 2 resources and automatically dispatches your idle golems to collect them.
+      </p>
+      ${cards}
+    </div>`;
 }
 
 // ─────────────────────────────────────────────────────
@@ -2684,9 +2850,9 @@ function renderGolemRoster() {
   el.innerHTML = G.golems.map(golem => {
     const def = GOLEM_TYPES[golem.typeId];
     const isIdle = golem.state === "idle";
-    const isIntelligent = def.role === "feeder" || def.role === "carrier";
+    const isIntelligent = def.role === "feeder" || def.role === "carrier" || def.role === "explorer";
 
-    // ── Intelligent golem (feeder / carrier) — managed from Alembic panel ──
+    // ── Intelligent golem (feeder / carrier / explorer) — managed from dedicated panels ──
     if (isIntelligent) return "";
 
     // ── Standard golem ──
@@ -2852,8 +3018,9 @@ function renderRecipes() {
   const slots = maxGolems - G.golems.length;
   el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px;">Golem slots: ${G.golems.length}/${maxGolems} &mdash; <span style="color:${slots>0?'var(--green)':'var(--red)'}">${slots} slot(s) free</span></div>`
     + Object.entries(GOLEM_TYPES).map(([typeId, def]) => {
-      // Hide intelligent golems unless Divination is researched
+      // Hide intelligent golems unless the relevant research is complete
       if ((def.role === "feeder" || def.role === "carrier") && !G.intelligentGolemsUnlocked) return "";
+      if (def.role === "explorer" && !G.explorerGolemsUnlocked) return "";
 
       const workshopLocked = G.workshopLevel < def.unlock;
       const noSlots = slots <= 0;
@@ -3047,6 +3214,7 @@ function renderAll() {
   renderGolemRoster();
   renderZones();
   renderAlchemistActions();
+  renderExpeditionBtn();
 }
 
 // ─────────────────────────────────────────────────────
@@ -3168,6 +3336,7 @@ function saveGame() {
       alembicsBuilt: G.alembicsBuilt,
       alembicConfigs: G.alembicConfigs,
       intelligentGolemsUnlocked: G.intelligentGolemsUnlocked,
+      explorerGolemsUnlocked: G.explorerGolemsUnlocked,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -3188,7 +3357,10 @@ function loadGame() {
       bonus_capacity: g.bonus_capacity || 0,
       speed_mult: g.speed_mult || 1.0,
       targetRecipeId: g.targetRecipeId || null,
-      alembicSlot: g.alembicSlot || null
+      alembicSlot: g.alembicSlot || null,
+      trackedResources: g.trackedResources || [],
+      dispatchedByExplorerId: g.dispatchedByExplorerId || null,
+      dispatchedForSlot: g.dispatchedForSlot !== undefined ? g.dispatchedForSlot : null
     }));
     G.nextGolemId      = save.nextGolemId||1;
     G.workshopLevel    = save.workshopLevel||0;
@@ -3265,6 +3437,7 @@ function loadGame() {
     G.autoDistiller = save.autoDistiller || false;
     G.autoResearch = save.autoResearch || false;
     G.intelligentGolemsUnlocked = save.intelligentGolemsUnlocked || false;
+    G.explorerGolemsUnlocked = save.explorerGolemsUnlocked || false;
 
     // Handle in-progress distillation (complete if finished during offline)
     if (G.distiller && G.distiller.currentProcessing) {
@@ -3455,6 +3628,7 @@ function gameLoop() {
   tickResearch(now);
   tickAlembics(now);
   tickProgressBars(now);
+  if (G.currentView === "expeditions") renderExpeditionPanel();
 
   saveTimer += delta;
   if (saveTimer >= 1000) {
@@ -3477,6 +3651,8 @@ function setupEventDelegation() {
     if (!el) return;
     if (el.dataset.action === 'assign-golem-recipe') {
       assignGolemToRecipe(Number(el.dataset.golem), el.value);
+    } else if (el.dataset.action === 'set-explorer-resource') {
+      setExplorerResource(Number(el.dataset.explorer), Number(el.dataset.slot), el.value);
     }
   });
 
@@ -3516,6 +3692,10 @@ function setupEventDelegation() {
     } else if (action === 'queue-research')   { queueResearch(btn.dataset.nodeId);
     } else if (action === 'cancel-research')  { cancelActiveResearch();
     } else if (action === 'remove-from-queue') { removeFromQueue(btn.dataset.nodeId);
+
+    // Expedition Actions
+    } else if (action === 'show-expeditions') { showExpeditionPanel();
+    } else if (action === 'hide-expeditions') { hideExpeditionPanel();
 
     // Alembic Actions
     } else if (action === 'show-alembics')    { showAlembicPanel();
