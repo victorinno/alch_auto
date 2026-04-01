@@ -1443,6 +1443,22 @@ function unassignCollectorFromOutput(recipeId) {
   saveGame(); renderAlembicPanel(); renderGolemRoster();
 }
 
+function freeAllFeeders() {
+  G.golems.forEach(golem => {
+    const def = GOLEM_TYPES[golem.typeId];
+    if (def.role !== 'feeder' && def.role !== 'carrier') return;
+    if (!golem.targetRecipeId && !golem.alembicSlot) return;
+    golem.state = 'idle'; golem.tripStart = null; golem.tripEnd = null;
+    golem.collected = {}; golem.alembicSlot = null; golem.targetRecipeId = null;
+  });
+  Object.values(G.alembicConfigs).forEach(config => {
+    config.feederSlots = {};
+    config.collectorCount = 0;
+  });
+  log('🔮 All feeder/carrier golems freed.', 'info');
+  saveGame(); renderAlembicPanel(); renderGolemRoster();
+}
+
 function recallGolem(golemId) {
   const golem = G.golems.find(g => g.id == golemId);
   if (!golem || golem.state === "idle") return;
@@ -2411,6 +2427,26 @@ function renderAlembicPanel() {
     });
   }
 
+  if (G.intelligentGolemsUnlocked) {
+    const assignedCount = G.golems.filter(g => {
+      const def = GOLEM_TYPES[g.typeId];
+      return (def.role === 'feeder' || def.role === 'carrier') && (g.targetRecipeId || g.alembicSlot);
+    }).length;
+    const totalCount = G.golems.filter(g => {
+      const def = GOLEM_TYPES[g.typeId];
+      return def.role === 'feeder' || def.role === 'carrier';
+    }).length;
+    html += `
+      <div style="margin-top:20px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:11px;color:var(--text-dim);flex:1;">🔮 Feeder/Carrier Golems: ${totalCount - assignedCount} idle / ${assignedCount} assigned</span>
+        <button class="btn" data-action="free-all-feeders"
+          style="color:var(--amber);border-color:var(--amber);" ${assignedCount === 0 ? 'disabled' : ''}>
+          Free All Feeders
+        </button>
+      </div>
+    `;
+  }
+
   html += `</div>`;
 
   panel.innerHTML = html;
@@ -2650,50 +2686,8 @@ function renderGolemRoster() {
     const isIdle = golem.state === "idle";
     const isIntelligent = def.role === "feeder" || def.role === "carrier";
 
-    // ── Intelligent golem (feeder / carrier) ──
-    if (isIntelligent) {
-      const stateLabels = { idle: "Idle", feeding: "⚡ Feeding…", pickup: "🚚 Picking up…", delivering: "🚚 Delivering…" };
-      const stateColor  = isIdle ? "var(--amber)" : "var(--purple)";
-      const statusText  = stateLabels[golem.state] || golem.state;
-      const assignedRecipe = golem.targetRecipeId ? ALCHEMY_RECIPES.find(r => r.id === golem.targetRecipeId) : null;
-
-      // Recipe assignment dropdown (only when idle)
-      let assignHtml = "";
-      if (isIdle) {
-        const configuredRecipes = Object.keys(G.alembicConfigs).filter(rid => G.alembicConfigs[rid].allocatedAlembics > 0);
-        const options = configuredRecipes.map(rid => {
-          const r = ALCHEMY_RECIPES.find(x => x.id === rid);
-          return `<option value="${rid}" ${golem.targetRecipeId === rid ? "selected" : ""}>${r?.icon} ${r?.name}</option>`;
-        }).join("");
-        assignHtml = `
-          <div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border);font-size:10px;">
-            <span style="color:var(--text-dim);">Assign to Alembic:</span>
-            <select data-action="assign-golem-recipe" data-golem="${golem.id}"
-              style="background:var(--bg2);color:var(--text);border:1px solid var(--border);font-size:10px;margin-left:4px;">
-              <option value="">— Unassigned —</option>
-              ${options}
-            </select>
-            ${configuredRecipes.length === 0 ? '<span style="color:var(--text-dim);margin-left:4px;">(Configure an Alembic first)</span>' : ''}
-          </div>`;
-      } else if (assignedRecipe) {
-        assignHtml = `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">→ ${assignedRecipe.icon} ${assignedRecipe.name}</div>`;
-      }
-
-      return `<div style="border:1px solid var(--purple);padding:5px 7px;margin-bottom:5px;background:var(--bg3);">
-        <div style="display:flex;align-items:center;gap:4px;">
-          <span style="font-size:11px;color:var(--purple);flex:1;">🔮 ${golem.name}</span>
-          <span style="font-size:10px;color:var(--text-dim);">T${def.tier}</span>
-          <span style="font-size:10px;color:${stateColor};">${statusText}</span>
-          ${isIdle
-            ? `<button class="btn-sm" data-action="destroy-golem" data-golem="${golem.id}"
-                 style="color:var(--red);padding:1px 5px;font-size:10px;">✕</button>`
-            : `<button class="btn-sm" data-action="recall-zone" data-golem="${golem.id}"
-                 style="color:var(--amber);padding:1px 5px;font-size:10px;">↩</button>`
-          }
-        </div>
-        ${assignHtml}
-      </div>`;
-    }
+    // ── Intelligent golem (feeder / carrier) — managed from Alembic panel ──
+    if (isIntelligent) return "";
 
     // ── Standard golem ──
     const zone = ZONES.find(z => z.id === golem.zoneId);
@@ -3547,6 +3541,8 @@ function setupEventDelegation() {
       assignCollectorToOutput(btn.dataset.recipe);
     } else if (action === 'unassign-alembic-collector') {
       unassignCollectorFromOutput(btn.dataset.recipe);
+    } else if (action === 'free-all-feeders') {
+      freeAllFeeders();
 
     // Debug Actions
     } else if (action === 'debug-give-resource')     { debugGiveResource();
