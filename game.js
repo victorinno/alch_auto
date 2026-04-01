@@ -3519,6 +3519,14 @@ function debugSkipTime() {
     G.distiller.currentProcessing.endTime = Math.max(now, G.distiller.currentProcessing.endTime - skipMs);
   }
 
+  // Skip alembic craft timers
+  Object.values(G.alembicConfigs || {}).forEach(config => {
+    if (config.currentCraft) {
+      config.currentCraft.endTime = Math.max(now, config.currentCraft.endTime - skipMs);
+      config.currentCraft.startTime = Math.min(config.currentCraft.startTime, config.currentCraft.endTime - 1);
+    }
+  });
+
   // Skip exploration timer
   if (G.explorationEndTime) {
     G.explorationEndTime = Math.max(now, G.explorationEndTime - skipMs);
@@ -3559,7 +3567,8 @@ function debugBuildMachines() {
     G.injector = {
       built: true,
       capacity: 100,
-      currentAmount: 0
+      currentAmount: 0,
+      divinationAmount: 0
     };
     log("🐛 DEBUG: Built Injector", "info");
   }
