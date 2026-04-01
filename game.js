@@ -3489,6 +3489,7 @@ function debugGiveResource() {
   renderResources();
   renderRecipes();
   renderAlchemy();
+  renderUpgrades();
   renderResearchLab();
 }
 
