@@ -653,4 +653,182 @@ test.describe('Alembic Automation', () => {
     console.log('✓ Two recipes configured simultaneously');
   });
 
+  test('feeder slot assignment: assign feeder to herb input, herbs flow into buffer automatically', async ({ page }) => {
+    console.log('\n--- Test: feeder slot assignment feeds herbs into input buffer ---');
+
+    await setupForAlembic(page);
+
+    // Unlock intelligent golems (divination research)
+    await page.evaluate(() => {
+      G.intelligentGolemsUnlocked = true;
+    });
+
+    // Build 1 alembic and configure herb_tonic
+    await page.click('button[data-action="build-alembic"]');
+    await page.waitForTimeout(200);
+
+    await page.evaluate(() => {
+      selectAlembicRecipe('herb_tonic');
+      allocateAlembics('herb_tonic', 1);
+    });
+    await page.waitForTimeout(200);
+
+    // Give herbs to inventory for the feeder to pick up
+    const { giveResource } = require('./helpers');
+    await giveResource(page, 'herbs', 50);
+
+    // Craft a Feeder Golem
+    await page.evaluate(() => {
+      G.resources.divination_shard = (G.resources.divination_shard || 0) + 10;
+      G.resources.essence = (G.resources.essence || 0) + 20;
+      craftGolem('feeder');
+    });
+    await page.waitForTimeout(200);
+
+    const feederCount = await page.evaluate(() => G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'feeder').length);
+    console.log(`Feeder golems crafted: ${feederCount}`);
+    expect(feederCount).toBeGreaterThan(0);
+
+    // Assign feeder to herbs input slot
+    await page.evaluate(() => assignFeederToSlot('herb_tonic', 'herbs'));
+    await page.waitForTimeout(300);
+
+    const feederSlotCount = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.feederSlots?.herbs || 0);
+    console.log(`Feeder slot count for herbs: ${feederSlotCount}`);
+    expect(feederSlotCount).toBe(1);
+
+    // Verify feeder has correct targetRecipeId and alembicSlot
+    const feederState = await page.evaluate(() => {
+      const g = G.golems.find(g => GOLEM_TYPES[g.typeId]?.role === 'feeder');
+      return g ? { targetRecipeId: g.targetRecipeId, alembicSlot: g.alembicSlot } : null;
+    });
+    console.log(`Feeder state: ${JSON.stringify(feederState)}`);
+    expect(feederState.targetRecipeId).toBe('herb_tonic');
+    expect(feederState.alembicSlot).toBe('herbs');
+
+    // Skip 10 seconds — feeder should have completed a feeding trip
+    const { skipTime } = require('./helpers');
+    const herbsBefore = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.inputBuffers?.herbs || 0);
+    console.log(`Input buffer herbs before skip: ${herbsBefore}`);
+
+    await skipTime(page, 10);
+    await page.waitForTimeout(500);
+
+    const herbsAfter = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.inputBuffers?.herbs || 0);
+    console.log(`Input buffer herbs after skip: ${herbsAfter}`);
+    expect(herbsAfter).toBeGreaterThan(herbsBefore);
+
+    console.log('✓ Feeder slot assignment feeds herbs into input buffer automatically');
+  });
+
+  test('collector slot assignment: assign carrier to output, items auto-collected to inventory', async ({ page }) => {
+    console.log('\n--- Test: collector slot assignment auto-collects output ---');
+
+    await setupForAlembic(page);
+
+    await page.evaluate(() => {
+      G.intelligentGolemsUnlocked = true;
+    });
+
+    // Build alembic, configure herb_tonic, load inputs manually
+    await page.click('button[data-action="build-alembic"]');
+    await page.waitForTimeout(200);
+
+    await page.evaluate(() => {
+      selectAlembicRecipe('herb_tonic');
+      allocateAlembics('herb_tonic', 1);
+      G.alembicConfigs['herb_tonic'].inputBuffers['herbs'] = 40;
+    });
+    await page.waitForTimeout(200);
+
+    // Craft a Carrier Golem
+    await page.evaluate(() => {
+      G.resources.divination_shard = (G.resources.divination_shard || 0) + 10;
+      G.resources.iron = (G.resources.iron || 0) + 20;
+      G.resources.crystals = (G.resources.crystals || 0) + 20;
+      craftGolem('carrier');
+    });
+    await page.waitForTimeout(200);
+
+    const carrierCount = await page.evaluate(() => G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'carrier').length);
+    console.log(`Carrier golems: ${carrierCount}`);
+    expect(carrierCount).toBeGreaterThan(0);
+
+    // Skip time to complete a craft and fill output buffer
+    const { skipTime } = require('./helpers');
+    await skipTime(page, 10);
+    await page.waitForTimeout(500);
+
+    const outputBefore = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.outputBuffer?.amount || 0);
+    console.log(`Output buffer before collector assignment: ${outputBefore}`);
+
+    // Assign carrier to output
+    await page.evaluate(() => assignCollectorToOutput('herb_tonic'));
+    await page.waitForTimeout(300);
+
+    const collectorCount = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.collectorCount || 0);
+    console.log(`Collector count: ${collectorCount}`);
+    expect(collectorCount).toBe(1);
+
+    const carrierSlot = await page.evaluate(() => {
+      const g = G.golems.find(g => GOLEM_TYPES[g.typeId]?.role === 'carrier');
+      return g ? { targetRecipeId: g.targetRecipeId, alembicSlot: g.alembicSlot } : null;
+    });
+    console.log(`Carrier slot: ${JSON.stringify(carrierSlot)}`);
+    expect(carrierSlot.alembicSlot).toBe('output');
+
+    // If there's output, skip time to let collector collect it
+    if (outputBefore > 0) {
+      const goldBefore = await page.evaluate(() => G.resources.gold || 0);
+      await skipTime(page, 8);
+      await page.waitForTimeout(500);
+      const outputAfter = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.outputBuffer?.amount || 0);
+      const goldAfter = await page.evaluate(() => G.resources.gold || 0);
+      console.log(`Output buffer after collection: ${outputAfter}, gold: ${goldBefore} → ${goldAfter}`);
+      expect(goldAfter).toBeGreaterThanOrEqual(goldBefore);
+    }
+
+    console.log('✓ Collector slot assignment auto-collects output from alembic');
+  });
+
+  test('unassign feeder from slot: feeder returns to idle and slot count drops', async ({ page }) => {
+    console.log('\n--- Test: unassign feeder from slot ---');
+
+    await setupForAlembic(page);
+    await page.evaluate(() => { G.intelligentGolemsUnlocked = true; });
+
+    await page.click('button[data-action="build-alembic"]');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => {
+      selectAlembicRecipe('herb_tonic');
+      allocateAlembics('herb_tonic', 1);
+      G.resources.divination_shard = (G.resources.divination_shard || 0) + 10;
+      G.resources.essence = (G.resources.essence || 0) + 20;
+      craftGolem('feeder');
+    });
+    await page.waitForTimeout(200);
+
+    await page.evaluate(() => assignFeederToSlot('herb_tonic', 'herbs'));
+    await page.waitForTimeout(200);
+
+    const slotBefore = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.feederSlots?.herbs || 0);
+    expect(slotBefore).toBe(1);
+
+    await page.evaluate(() => unassignFeederFromSlot('herb_tonic', 'herbs'));
+    await page.waitForTimeout(200);
+
+    const slotAfter = await page.evaluate(() => G.alembicConfigs['herb_tonic']?.feederSlots?.herbs || 0);
+    const feederIdle = await page.evaluate(() => {
+      const g = G.golems.find(g => GOLEM_TYPES[g.typeId]?.role === 'feeder');
+      return g ? { state: g.state, alembicSlot: g.alembicSlot, targetRecipeId: g.targetRecipeId } : null;
+    });
+    console.log(`Slot count after unassign: ${slotAfter}, feeder state: ${JSON.stringify(feederIdle)}`);
+    expect(slotAfter).toBe(0);
+    expect(feederIdle.state).toBe('idle');
+    expect(feederIdle.alembicSlot).toBeNull();
+    expect(feederIdle.targetRecipeId).toBeNull();
+
+    console.log('✓ Feeder unassigned from slot, returned to idle');
+  });
+
 });

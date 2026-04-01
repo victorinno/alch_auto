@@ -1126,7 +1126,9 @@ function selectAlembicRecipe(recipeId) {
       inputBuffers: {},
       outputBuffer: { resourceId: null, amount: 0 },
       speedBoost: 1.0,
-      currentCraft: null
+      currentCraft: null,
+      feederSlots: {},    // { resourceId: count } — feeders dedicated per input slot
+      collectorCount: 0   // carriers dedicated to output collection
     };
 
     // Initialize input buffers for recipe ingredients
@@ -1326,7 +1328,8 @@ function craftGolem(typeId) {
     danger_resist: def.danger_resist,  // starts at base type value, can be increased
     bonus_capacity: 0,     // extra carry slots from upgrades
     speed_mult: 1.0,       // travel speed multiplier from upgrades
-    targetRecipeId: null   // for feeder/carrier: which Alembic recipe to supply
+    targetRecipeId: null,  // for feeder/carrier: which Alembic recipe to supply
+    alembicSlot: null      // specific slot assigned to: resourceId string (input) or 'output', or null
   };
   G.golems.push(golem);
   log(`✨ Crafted ${golem.name}!`, "great");
@@ -1378,6 +1381,68 @@ function assignGolemToRecipe(golemId, recipeId) {
   saveGame();
 }
 
+function assignFeederToSlot(recipeId, resourceId) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config) return;
+  const golem = G.golems.find(g => {
+    const def = GOLEM_TYPES[g.typeId];
+    return def.role === 'feeder' && g.state === 'idle' && g.alembicSlot === null;
+  });
+  if (!golem) { log('No idle Feeder Golems available!', 'warn'); return; }
+  golem.targetRecipeId = recipeId;
+  golem.alembicSlot = resourceId;
+  config.feederSlots[resourceId] = (config.feederSlots[resourceId] || 0) + 1;
+  const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+  log(`⚗️ ${golem.name} assigned to feed ${RESOURCES[resourceId].name} → ${recipe.name}.`, 'good');
+  saveGame(); renderAlembicPanel(); renderGolemRoster();
+}
+
+function unassignFeederFromSlot(recipeId, resourceId) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config || !(config.feederSlots[resourceId] > 0)) return;
+  const golem = G.golems.find(g => {
+    const def = GOLEM_TYPES[g.typeId];
+    return def.role === 'feeder' && g.targetRecipeId === recipeId && g.alembicSlot === resourceId;
+  });
+  if (!golem) return;
+  golem.targetRecipeId = null; golem.alembicSlot = null;
+  golem.state = 'idle'; golem.tripStart = null; golem.tripEnd = null;
+  config.feederSlots[resourceId] = Math.max(0, (config.feederSlots[resourceId] || 0) - 1);
+  log(`⚗️ ${golem.name} unassigned from ${RESOURCES[resourceId].name} slot.`, 'info');
+  saveGame(); renderAlembicPanel(); renderGolemRoster();
+}
+
+function assignCollectorToOutput(recipeId) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config) return;
+  const golem = G.golems.find(g => {
+    const def = GOLEM_TYPES[g.typeId];
+    return def.role === 'carrier' && g.state === 'idle' && g.alembicSlot === null;
+  });
+  if (!golem) { log('No idle Carrier Golems available!', 'warn'); return; }
+  golem.targetRecipeId = recipeId;
+  golem.alembicSlot = 'output';
+  config.collectorCount = (config.collectorCount || 0) + 1;
+  const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+  log(`🚚 ${golem.name} assigned to collect output from ${recipe.name}.`, 'good');
+  saveGame(); renderAlembicPanel(); renderGolemRoster();
+}
+
+function unassignCollectorFromOutput(recipeId) {
+  const config = G.alembicConfigs[recipeId];
+  if (!config || !(config.collectorCount > 0)) return;
+  const golem = G.golems.find(g => {
+    const def = GOLEM_TYPES[g.typeId];
+    return def.role === 'carrier' && g.targetRecipeId === recipeId && g.alembicSlot === 'output';
+  });
+  if (!golem) return;
+  golem.targetRecipeId = null; golem.alembicSlot = null;
+  golem.state = 'idle'; golem.tripStart = null; golem.tripEnd = null; golem.collected = {};
+  config.collectorCount = Math.max(0, (config.collectorCount || 0) - 1);
+  log(`🚚 ${golem.name} unassigned from output collection.`, 'info');
+  saveGame(); renderAlembicPanel(); renderGolemRoster();
+}
+
 function recallGolem(golemId) {
   const golem = G.golems.find(g => g.id == golemId);
   if (!golem || golem.state === "idle") return;
@@ -1416,6 +1481,17 @@ function destroyGolem(golemId) {
   if (idx === -1) return;
   const golem = G.golems[idx];
   if (golem.state !== "idle") { log(`Recall ${golem.name} before dismantling!`, "warn"); return; }
+  // Clear any feeder/collector slot assignment from the config
+  if (golem.alembicSlot && golem.targetRecipeId) {
+    const config = G.alembicConfigs[golem.targetRecipeId];
+    if (config) {
+      if (golem.alembicSlot === 'output') {
+        config.collectorCount = Math.max(0, (config.collectorCount || 0) - 1);
+      } else {
+        config.feederSlots[golem.alembicSlot] = Math.max(0, (config.feederSlots[golem.alembicSlot] || 0) - 1);
+      }
+    }
+  }
   const def = GOLEM_TYPES[golem.typeId];
   const refund = {};
   for (const [r,a] of Object.entries(def.cost)) refund[r] = Math.floor(a * 0.5);
@@ -1451,7 +1527,11 @@ function tickGolems(now) {
           const capacity = def.capacity + (golem.bonus_capacity || 0);
           let remaining = capacity;
           let totalDeposited = 0;
-          Object.entries(recipe.ingredients).forEach(([id, amtPerCraft]) => {
+          // If assigned to a specific slot, only deposit that ingredient
+          const ingredientEntries = golem.alembicSlot
+            ? Object.entries(recipe.ingredients).filter(([id]) => id === golem.alembicSlot)
+            : Object.entries(recipe.ingredients);
+          ingredientEntries.forEach(([id, amtPerCraft]) => {
             if (remaining <= 0) return;
             const space = maxCapacity - (config.inputBuffers[id] || 0);
             if (space <= 0) return;
@@ -1470,6 +1550,31 @@ function tickGolems(now) {
           }
         }
         golem.state = "idle"; golem.tripStart = null; golem.tripEnd = null;
+        stateChanged = true;
+      }
+      continue;
+    }
+
+    // ── Carrier Golem: output-collecting mode when alembicSlot === 'output' ──
+    if (def.role === "carrier" && golem.alembicSlot === 'output') {
+      if (golem.state === "idle") {
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        if (!config || config.allocatedAlembics === 0 || config.outputBuffer.amount === 0) continue;
+        golem.state = "pickup"; golem.tripPhase = "collecting";
+        golem.tripStart = now; golem.tripEnd = now + 5000;
+        stateChanged = true;
+      } else if (golem.state === "pickup" && golem.tripPhase === "collecting" && now >= golem.tripEnd) {
+        const config = G.alembicConfigs[golem.targetRecipeId];
+        if (config && config.outputBuffer.amount > 0) {
+          const resId = config.outputBuffer.resourceId;
+          const amount = config.outputBuffer.amount;
+          G.resources[resId] = (G.resources[resId] || 0) + amount;
+          config.outputBuffer.amount = 0;
+          const recipe = ALCHEMY_RECIPES.find(r => r.id === golem.targetRecipeId);
+          log(`🚚 ${golem.name} collected ${amount}x ${RESOURCES[resId].name} from ${recipe.name} Alembic.`, 'good');
+          renderResources(); renderAlembicPanel();
+        }
+        golem.state = "idle"; golem.tripStart = null; golem.tripEnd = null; golem.tripPhase = null;
         stateChanged = true;
       }
       continue;
@@ -2356,16 +2461,31 @@ function renderAlembicConfigCard(config, recipe) {
     Object.entries(recipe.ingredients).forEach(([id, amount]) => {
       const current = config.inputBuffers[id] || 0;
       const percent = (current / maxCapacity) * 100;
+      // Feeder slot controls
+      const feederCount = config.feederSlots[id] || 0;
+      const feederNames = G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'feeder' && g.targetRecipeId === config.recipeId && g.alembicSlot === id).map(g => g.name);
+      const idleFeeders = G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'feeder' && g.state === 'idle' && g.alembicSlot === null).length;
+      const feederHtml = G.intelligentGolemsUnlocked ? `
+        <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+          <span style="font-size:10px;color:var(--purple);">⚗️ Feeders:</span>
+          <button class="btn-sm" data-action="unassign-alembic-feeder" data-recipe="${config.recipeId}" data-resource="${id}" ${feederCount === 0 ? 'disabled' : ''}>-</button>
+          <span style="font-size:11px;min-width:16px;text-align:center;">${feederCount}</span>
+          <button class="btn-sm" data-action="assign-alembic-feeder" data-recipe="${config.recipeId}" data-resource="${id}" ${idleFeeders === 0 ? 'disabled' : ''}>+</button>
+          ${feederNames.length > 0 ? `<span style="font-size:9px;color:var(--text-dim);">(${feederNames.join(', ')})</span>` : ''}
+        </div>` : '';
       html += `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <span style="font-size:11px;min-width:120px;">${RESOURCES[id].icon} ${RESOURCES[id].name}:</span>
-          <div style="flex:1;background:var(--bg);border:1px solid var(--border);height:16px;border-radius:2px;position:relative;overflow:hidden;">
-            <div style="position:absolute;top:0;left:0;height:100%;width:${percent}%;background:var(--green);transition:width 0.3s;"></div>
-            <span style="position:absolute;top:0;left:4px;font-size:10px;color:var(--text);line-height:16px;">${current}/${maxCapacity}</span>
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;min-width:120px;">${RESOURCES[id].icon} ${RESOURCES[id].name}:</span>
+            <div style="flex:1;background:var(--bg);border:1px solid var(--border);height:16px;border-radius:2px;position:relative;overflow:hidden;">
+              <div style="position:absolute;top:0;left:0;height:100%;width:${percent}%;background:var(--green);transition:width 0.3s;"></div>
+              <span style="position:absolute;top:0;left:4px;font-size:10px;color:var(--text);line-height:16px;">${current}/${maxCapacity}</span>
+            </div>
+            <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="1">+1</button>
+            <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="10">+10</button>
+            <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="100">+100</button>
           </div>
-          <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="1">+1</button>
-          <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="10">+10</button>
-          <button class="btn-sm" data-action="load-alembic-input" data-recipe="${config.recipeId}" data-resource="${id}" data-amount="100">+100</button>
+          ${feederHtml}
         </div>
       `;
     });
@@ -2376,6 +2496,18 @@ function renderAlembicConfigCard(config, recipe) {
     const outputCurrent = config.outputBuffer.amount;
     const outputPercent = (outputCurrent / maxCapacity) * 100;
     const outputRes = config.outputBuffer.resourceId || outputResId;
+    // Collector slot controls
+    const collectorCount = config.collectorCount || 0;
+    const collectorNames = G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'carrier' && g.targetRecipeId === config.recipeId && g.alembicSlot === 'output').map(g => g.name);
+    const idleCarriers = G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === 'carrier' && g.state === 'idle' && g.alembicSlot === null).length;
+    const collectorHtml = G.intelligentGolemsUnlocked ? `
+      <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+        <span style="font-size:10px;color:var(--purple);">🚚 Collectors:</span>
+        <button class="btn-sm" data-action="unassign-alembic-collector" data-recipe="${config.recipeId}" ${collectorCount === 0 ? 'disabled' : ''}>-</button>
+        <span style="font-size:11px;min-width:16px;text-align:center;">${collectorCount}</span>
+        <button class="btn-sm" data-action="assign-alembic-collector" data-recipe="${config.recipeId}" ${idleCarriers === 0 ? 'disabled' : ''}>+</button>
+        ${collectorNames.length > 0 ? `<span style="font-size:9px;color:var(--text-dim);">(${collectorNames.join(', ')})</span>` : ''}
+      </div>` : '';
 
     html += `
       <div style="margin-bottom:12px;">
@@ -2391,6 +2523,7 @@ function renderAlembicConfigCard(config, recipe) {
             Collect
           </button>
         </div>
+        ${collectorHtml}
       </div>
     `;
 
@@ -2443,24 +2576,18 @@ function renderAlembicConfigCard(config, recipe) {
     `;
   }
 
-  // Assigned intelligent golems
-  const assignedGolems = G.golems.filter(g => g.targetRecipeId === config.recipeId);
-  if (G.intelligentGolemsUnlocked && assignedGolems.length > 0) {
+  // Show unslotted golems assigned to this recipe (fallback / no-slot mode)
+  const unslottedGolems = G.golems.filter(g => g.targetRecipeId === config.recipeId && g.alembicSlot === null);
+  if (G.intelligentGolemsUnlocked && unslottedGolems.length > 0) {
     const stateLabels = { idle: "waiting", feeding: "⚡ feeding", pickup: "🚚 pickup", delivering: "🚚 delivering" };
     html += `
       <div style="margin-top:12px;padding:8px;background:rgba(204,68,255,0.07);border:1px solid var(--purple);border-radius:4px;">
-        <div style="font-size:10px;color:var(--purple);margin-bottom:4px;">🔮 Assigned Golems:</div>
-        ${assignedGolems.map(g => {
+        <div style="font-size:10px;color:var(--purple);margin-bottom:4px;">🔮 Unslotted Golems (general supply):</div>
+        ${unslottedGolems.map(g => {
           const gDef = GOLEM_TYPES[g.typeId];
           const stateLabel = stateLabels[g.state] || g.state;
           return `<div style="font-size:10px;color:var(--text);">${gDef.role === "feeder" ? "⚗️" : "🚚"} ${g.name} — ${stateLabel}</div>`;
         }).join("")}
-      </div>
-    `;
-  } else if (G.intelligentGolemsUnlocked) {
-    html += `
-      <div style="margin-top:12px;padding:6px 8px;border:1px dashed var(--border);border-radius:4px;font-size:10px;color:var(--text-dim);">
-        🔮 No Feeder/Carrier assigned — assign one from the Golem Roster
       </div>
     `;
   }
@@ -3066,7 +3193,8 @@ function loadGame() {
       danger_resist: g.danger_resist !== undefined ? g.danger_resist : (GOLEM_TYPES[g.typeId]?.danger_resist || 0),
       bonus_capacity: g.bonus_capacity || 0,
       speed_mult: g.speed_mult || 1.0,
-      targetRecipeId: g.targetRecipeId || null
+      targetRecipeId: g.targetRecipeId || null,
+      alembicSlot: g.alembicSlot || null
     }));
     G.nextGolemId      = save.nextGolemId||1;
     G.workshopLevel    = save.workshopLevel||0;
@@ -3172,6 +3300,11 @@ function loadGame() {
     G.alembicsUnlocked = save.alembicsUnlocked || false;
     G.alembicsBuilt = save.alembicsBuilt || 0;
     G.alembicConfigs = save.alembicConfigs || {};
+    // Backwards-compat: ensure feeder slot fields exist on loaded configs
+    Object.values(G.alembicConfigs).forEach(config => {
+      if (!config.feederSlots) config.feederSlots = {};
+      if (config.collectorCount === undefined) config.collectorCount = 0;
+    });
 
     // Handle in-progress Alembic crafts (complete if finished during offline)
     if (save.alembicConfigs) {
@@ -3406,6 +3539,14 @@ function setupEventDelegation() {
       loadAlembicInput(recipeId, resourceId, amount);
     } else if (action === 'collect-alembic-output') {
       collectAlembicOutput(btn.dataset.recipe);
+    } else if (action === 'assign-alembic-feeder') {
+      assignFeederToSlot(btn.dataset.recipe, btn.dataset.resource);
+    } else if (action === 'unassign-alembic-feeder') {
+      unassignFeederFromSlot(btn.dataset.recipe, btn.dataset.resource);
+    } else if (action === 'assign-alembic-collector') {
+      assignCollectorToOutput(btn.dataset.recipe);
+    } else if (action === 'unassign-alembic-collector') {
+      unassignCollectorFromOutput(btn.dataset.recipe);
 
     // Debug Actions
     } else if (action === 'debug-give-resource')     { debugGiveResource();
