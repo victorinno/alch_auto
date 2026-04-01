@@ -16,7 +16,8 @@
       "Bash(npx playwright test:*)",
       "Bash(timeout 60 tail:*)",
       "Bash(git commit:*)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(Feeders\" button is added at the bottom of the Alembic panel showing:*)"
     ],
     "deny": [],
     "ask": []
