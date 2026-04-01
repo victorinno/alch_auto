@@ -255,6 +255,21 @@ const RESEARCH_NODES = [
       G.alchemyProductivityBonus = level;
     }
   },
+  {
+    id: "alembic_capacity",
+    name: "Alembic Expansion",
+    desc: "Increase maximum Alembic capacity by +1 per level.",
+    icon: "⚗️",
+    tier: 1,
+    knowledgeType: "alchemy",
+    prerequisites: ["alembic_automation"],
+    baseCost: 200,
+    infinite: true,
+    maxLevel: Infinity,
+    effect: (level) => {
+      G.maxAlembics = 5 + level;
+    }
+  },
 
   // ═══════════════════════════════════════════════════
   // TIER 2 — One-Time Unlocks
