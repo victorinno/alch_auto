@@ -1343,7 +1343,8 @@ function craftGolem(typeId) {
   if ((def.role === "feeder" || def.role === "carrier") && !G.intelligentGolemsUnlocked) { log("Divination research required to craft intelligent golems.", "warn"); return; }
   if (def.role === "explorer" && !G.explorerGolemsUnlocked) { log("Expedition Mastery research required to craft Explorer Golems.", "warn"); return; }
   const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
-  if (G.golems.length >= maxGolems) { log("Golem dock is full! Upgrade workshop.", "warn"); return; }
+  const regularGolemCount = G.golems.filter(g => !GOLEM_TYPES[g.typeId]?.role).length;
+  if (!def.role && regularGolemCount >= maxGolems) { log("Golem dock is full! Upgrade workshop.", "warn"); return; }
   if (!canAfford(def.cost, G.craftCostMult)) { log(`Not enough resources to craft ${def.name}.`, "warn"); return; }
   spend(def.cost, G.craftCostMult);
   const golem = {
@@ -3015,15 +3016,16 @@ function renderRecipes() {
   const el = document.getElementById("golem-recipes");
   if (!el) return;
   const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
-  const slots = maxGolems - G.golems.length;
-  el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px;">Golem slots: ${G.golems.length}/${maxGolems} &mdash; <span style="color:${slots>0?'var(--green)':'var(--red)'}">${slots} slot(s) free</span></div>`
+  const regularGolemCount = G.golems.filter(g => !GOLEM_TYPES[g.typeId]?.role).length;
+  const slots = maxGolems - regularGolemCount;
+  el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;margin-bottom:6px;">Golem slots: ${regularGolemCount}/${maxGolems} &mdash; <span style="color:${slots>0?'var(--green)':'var(--red)'}">${slots} slot(s) free</span></div>`
     + Object.entries(GOLEM_TYPES).map(([typeId, def]) => {
       // Hide intelligent golems unless the relevant research is complete
       if ((def.role === "feeder" || def.role === "carrier") && !G.intelligentGolemsUnlocked) return "";
       if (def.role === "explorer" && !G.explorerGolemsUnlocked) return "";
 
       const workshopLocked = G.workshopLevel < def.unlock;
-      const noSlots = slots <= 0;
+      const noSlots = !def.role && slots <= 0; // intelligent golems are unlimited
       const costMissing = !canAfford(def.cost, G.craftCostMult);
       const canCraft = !workshopLocked && !noSlots && !costMissing;
 
@@ -3038,7 +3040,7 @@ function renderRecipes() {
       // Reason why disabled
       let blockReason = "";
       if (workshopLocked) blockReason = `<span style="color:var(--red)"> ⚠ Requires Workshop Lvl ${def.unlock}</span>`;
-      else if (noSlots)   blockReason = `<span style="color:var(--red)"> ⚠ No golem slots free — upgrade Workshop!</span>`;
+      else if (noSlots)   blockReason = `<span style="color:var(--red)"> ⚠ No regular golem slots free — upgrade Workshop!</span>`;
 
       return `<div style="border:1px solid var(--border);padding:6px 8px;margin-bottom:6px;background:var(--bg3);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -3199,7 +3201,8 @@ function renderFooter() {
   if (el) {
     const wl = WORKSHOP_LEVELS[G.workshopLevel];
     const busy = G.golems.filter(g => g.state !== "idle").length;
-    el.textContent = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${G.golems.length}/${wl.maxGolems} (${busy} active) | Time: ${fmtTime(G.totalTime)}`;
+    const regularCount = G.golems.filter(g => !GOLEM_TYPES[g.typeId]?.role).length;
+    el.textContent = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${regularCount}/${wl.maxGolems} (${busy} active) | Time: ${fmtTime(G.totalTime)}`;
   }
 }
 
