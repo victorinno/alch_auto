@@ -31,9 +31,9 @@ test.describe('Alembic Automation', () => {
     console.log(`alembicsUnlocked: ${alembicsUnlocked}`);
     expect(alembicsUnlocked).toBeTruthy();
 
-    const alembicsSection = page.locator('#alembics-section');
-    const isVisible = await alembicsSection.isVisible();
-    console.log(`alembics-section visible: ${isVisible}`);
+    const alembicsBtn = page.locator('#alembics-btn');
+    const isVisible = await alembicsBtn.isVisible();
+    console.log(`alembics-btn visible: ${isVisible}`);
     expect(isVisible).toBeTruthy();
 
     console.log('✓ Alembic section appears in workshop');
@@ -43,6 +43,10 @@ test.describe('Alembic Automation', () => {
     console.log('\n--- Test: Build Alembic increases count ---');
 
     await setupForAlembic(page);
+
+    // Navigate into the Alembics panel where the build button lives
+    await page.evaluate(() => showAlembicPanel());
+    await page.waitForTimeout(500);
 
     const countBefore = await page.evaluate(() => G.alembicsBuilt);
     console.log(`Alembics built before: ${countBefore}`);
@@ -72,7 +76,7 @@ test.describe('Alembic Automation', () => {
     await setupForAlembic(page);
 
     // Build one alembic first
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(300);
 
     // Open config panel
@@ -96,7 +100,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(300);
 
     await page.click('button[data-action="show-alembics"]');
@@ -116,7 +120,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(300);
 
     await page.click('button[data-action="show-alembics"]');
@@ -152,7 +156,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(300);
 
     await page.click('button[data-action="show-alembics"]');
@@ -205,9 +209,9 @@ test.describe('Alembic Automation', () => {
     await setupForAlembic(page);
 
     // Build 2 alembics
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.click('button[data-action="show-alembics"]');
@@ -252,7 +256,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.click('button[data-action="show-alembics"]');
@@ -292,7 +296,7 @@ test.describe('Alembic Automation', () => {
 
     // Build 3 alembics
     for (let i = 0; i < 3; i++) {
-      await page.click('button[data-action="build-alembic"]');
+      await page.evaluate(() => buildAlembic());
       await page.waitForTimeout(150);
     }
 
@@ -330,7 +334,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.click('button[data-action="show-alembics"]');
@@ -386,7 +390,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     // Setup herb_tonic config
@@ -421,7 +425,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     // Setup and start crafting
@@ -455,7 +459,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.evaluate(() => {
@@ -503,7 +507,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.evaluate(() => {
@@ -537,7 +541,7 @@ test.describe('Alembic Automation', () => {
 
     await setupForAlembic(page);
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.evaluate(() => {
@@ -585,7 +589,7 @@ test.describe('Alembic Automation', () => {
     await setupForAlembic(page);
 
     // Build only 1 alembic
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     const alembicsBuilt = await page.evaluate(() => G.alembicsBuilt);
@@ -617,9 +621,9 @@ test.describe('Alembic Automation', () => {
     await setupForAlembic(page);
 
     // Build 2 alembics
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     const alembicsBuilt = await page.evaluate(() => G.alembicsBuilt);
@@ -664,7 +668,7 @@ test.describe('Alembic Automation', () => {
     });
 
     // Build 1 alembic and configure herb_tonic
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.evaluate(() => {
@@ -731,7 +735,7 @@ test.describe('Alembic Automation', () => {
     });
 
     // Build alembic, configure herb_tonic, load inputs manually
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
 
     await page.evaluate(() => {
@@ -797,7 +801,7 @@ test.describe('Alembic Automation', () => {
     await setupForAlembic(page);
     await page.evaluate(() => { G.intelligentGolemsUnlocked = true; });
 
-    await page.click('button[data-action="build-alembic"]');
+    await page.evaluate(() => buildAlembic());
     await page.waitForTimeout(200);
     await page.evaluate(() => {
       selectAlembicRecipe('herb_tonic');

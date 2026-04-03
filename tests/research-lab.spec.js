@@ -469,10 +469,10 @@ test.describe('Research Lab', () => {
     await navigateToWorkshop(page);
     await page.waitForTimeout(300);
 
-    // Alembics section should be visible
-    const alembicsSection = page.locator('#alembics-section');
-    const isVisible = await alembicsSection.isVisible();
-    console.log(`alembics-section visible: ${isVisible}`);
+    // Alembics button should be visible in the sidebar
+    const alembicsBtn = page.locator('#alembics-btn');
+    const isVisible = await alembicsBtn.isVisible();
+    console.log(`alembics-btn visible: ${isVisible}`);
     expect(isVisible).toBeTruthy();
 
     console.log('✓ Alembic Automation unlocked alembics section in workshop');

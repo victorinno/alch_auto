@@ -188,7 +188,7 @@ const RESEARCH_NODES = [
     effect: (level) => {
       G.alembicsUnlocked = true;
       log('🔓 Alembic Automation unlocked! Build Alembics to scale production.', 'great');
-      renderAlembics();
+      renderAlembicsBtn();
     }
   },
 
@@ -1135,7 +1135,7 @@ function buildAlembic() {
   G.alembicsBuilt++;
   log(`⚗️ Alembic built! (${G.alembicsBuilt}/${G.maxAlembics})`, "good");
   saveGame();
-  renderAlembics();
+  renderAlembicsBtn();
 }
 
 function selectAlembicRecipe(recipeId) {
@@ -2448,6 +2448,27 @@ function renderAlembicPanel() {
         Configure recipes and allocate Alembics (${G.alembicsBuilt}/${G.maxAlembics} built) to multiply production
       </p>
 
+      <!-- Build Alembic -->
+      <div style="background:var(--bg2);border:1px solid var(--border);padding:16px;margin-bottom:20px;border-radius:4px;">
+        <h3 style="color:var(--amber);margin-bottom:8px;">Build Alembic</h3>
+        ${(() => {
+          const alembicCost = { clay: 20, iron: 15, crystals: 10, gold: 100 };
+          if (G.alembicsBuilt >= G.maxAlembics) {
+            return `<div style="color:var(--green);font-size:11px;">All Alembics built (${G.alembicsBuilt}/${G.maxAlembics})</div>`;
+          }
+          const canAffordAlembic = canAfford(alembicCost);
+          const costHtml = Object.entries(alembicCost).map(([r, a]) => {
+            const have = G.resources[r] || 0;
+            const color = have >= a ? 'var(--green)' : 'var(--red)';
+            return `<span style="color:${color}">${a}x ${RESOURCES[r].icon}</span>`;
+          }).join(" ");
+          return `<button class="btn btn-amber" data-action="build-alembic" ${canAffordAlembic ? '' : 'disabled'}>
+            🔨 Build Alembic (${G.alembicsBuilt}/${G.maxAlembics})
+            <div class="btn-cost">${costHtml}</div>
+          </button>`;
+        })()}
+      </div>
+
       <!-- Recipe Selection -->
       <div style="background:var(--bg2);border:1px solid var(--border);padding:16px;margin-bottom:20px;border-radius:4px;">
         <h3 style="color:var(--amber);margin-bottom:8px;">Select Recipe</h3>
@@ -2704,11 +2725,6 @@ function renderAlembicConfigCard(config, recipe) {
 function showAlembicPanel() {
   if (!G.alembicsUnlocked) {
     log("Complete Alembic Automation research first!", "warn");
-    return;
-  }
-
-  if (G.alembicsBuilt === 0) {
-    log("Build at least 1 Alembic in the Workshop first!", "warn");
     return;
   }
 
@@ -3134,47 +3150,9 @@ function renderUpgrades() {
   el.innerHTML = workshopHtml + upgradesHtml;
 }
 
-function renderAlembics() {
-  const section = document.getElementById("alembics-section");
-  const el = document.getElementById("alembics-display");
-  if (!section || !el) return;
-
-  // Only show if unlocked via research
-  if (!G.alembicsUnlocked) {
-    section.style.display = "none";
-    return;
-  }
-
-  section.style.display = "block";
-
-  // Build Alembic button
-  const alembicCost = { clay: 20, iron: 15, crystals: 10, gold: 100 };
-  const canAffordAlembic = canAfford(alembicCost) && G.alembicsBuilt < G.maxAlembics;
-  const buildAlembicHtml = G.alembicsBuilt < G.maxAlembics
-    ? `<button class="btn btn-amber" data-action="build-alembic" ${canAffordAlembic ? '' : 'disabled'}>
-        🔨 Build Alembic (${G.alembicsBuilt}/${G.maxAlembics})
-        <div class="btn-cost">${Object.entries(alembicCost).map(([r, a]) => {
-          const have = G.resources[r] || 0;
-          const color = have >= a ? 'var(--green)' : 'var(--red)';
-          return `<span style="color:${color}">${a}x ${RESOURCES[r].icon}</span>`;
-        }).join(" ")}</div>
-      </button>`
-    : `<div style="color:var(--green);font-size:11px;margin-bottom:8px;">All Alembics built (${G.alembicsBuilt}/${G.maxAlembics})</div>`;
-
-  // Configure Alembics button
-  const configureHtml = G.alembicsBuilt > 0
-    ? `<button class="btn" data-action="show-alembics" style="width:100%;color:var(--purple);margin-top:6px;">
-        ⚗️ Configure Alembics
-      </button>`
-    : `<div style="color:var(--text-dim);font-size:10px;margin-top:6px;">Build at least one Alembic to configure recipes</div>`;
-
-  // Active configurations count
-  const activeConfigs = Object.values(G.alembicConfigs).filter(c => c.allocatedAlembics > 0).length;
-  const statusHtml = activeConfigs > 0
-    ? `<div style="color:var(--amber);font-size:10px;margin-top:4px;">${activeConfigs} active recipe configuration(s)</div>`
-    : '';
-
-  el.innerHTML = buildAlembicHtml + configureHtml + statusHtml;
+function renderAlembicsBtn() {
+  const btn = document.getElementById("alembics-btn");
+  if (btn) btn.style.display = G.alembicsUnlocked ? "block" : "none";
 }
 
 function renderMap(zoneId) {
@@ -3210,13 +3188,14 @@ function renderAll() {
   renderResources();
   renderRecipes();
   renderAlchemy();
-  renderAlembics();
+  renderAlembicsBtn();
   renderUpgrades();
   renderMap(null);
   renderFooter();
   renderGolemRoster();
   renderZones();
   renderAlchemistActions();
+  renderAlembicsBtn();
   renderExpeditionBtn();
 }
 
