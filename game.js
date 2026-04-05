@@ -3277,50 +3277,61 @@ function renderTutorial() {
   let highlightHtml = "";
   let cardStyle = "";
 
+  function buildTutorialCard() {
+    let hl = "";
+    let cs = "";
+    if (step.targetSelector) {
+      const target = document.querySelector(step.targetSelector);
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        const pad = 6;
+        const top = rect.top - pad;
+        const left = rect.left - pad;
+        const width = rect.width + pad * 2;
+        const height = rect.height + pad * 2;
+        hl = `<div class="tutorial-highlight" style="top:${top}px;left:${left}px;width:${width}px;height:${height}px;"></div>`;
+        const cardTop = (top + height + 12 + 160 < window.innerHeight)
+          ? `${top + height + 12}px`
+          : `${Math.max(8, top - 170)}px`;
+        const cardLeft = Math.min(Math.max(8, left), window.innerWidth - 360) + "px";
+        cs = `top:${cardTop};left:${cardLeft};`;
+      } else {
+        cs = "top:50%;left:50%;transform:translate(-50%,-50%);";
+      }
+    } else {
+      cs = "top:50%;left:50%;transform:translate(-50%,-50%);";
+    }
+    overlay.innerHTML = `
+      ${hl}
+      <div class="tutorial-card" style="${cs}">
+        <div class="tutorial-step-indicator">Step ${stepNum} of ${total}</div>
+        <h3>${step.title}</h3>
+        <p>${step.text}</p>
+        <div class="tutorial-actions">
+          <button class="btn" data-action="tutorial-next"
+            style="color:var(--green);border-color:var(--green);padding:3px 14px;font-size:11px;">
+            ${G.tutorialStep === total - 1 ? "Finish" : "Next →"}
+          </button>
+          ${G.tutorialStep < total - 1
+            ? `<button class="btn" data-action="tutorial-skip"
+                 style="color:var(--text-dim);border-color:var(--border);padding:3px 10px;font-size:11px;">
+                 Skip
+               </button>`
+            : ""}
+        </div>
+      </div>`;
+  }
+
   if (step.targetSelector) {
     const target = document.querySelector(step.targetSelector);
     if (target) {
-      const rect = target.getBoundingClientRect();
-      const pad = 6;
-      const top = rect.top - pad;
-      const left = rect.left - pad;
-      const width = rect.width + pad * 2;
-      const height = rect.height + pad * 2;
-      highlightHtml = `<div class="tutorial-highlight" style="top:${top}px;left:${left}px;width:${width}px;height:${height}px;"></div>`;
-
-      // Position card to avoid overlap — prefer below, fallback above
-      const cardTop = (top + height + 12 + 160 < window.innerHeight)
-        ? `${top + height + 12}px`
-        : `${Math.max(8, top - 170)}px`;
-      const cardLeft = Math.min(Math.max(8, left), window.innerWidth - 360) + "px";
-      cardStyle = `top:${cardTop};left:${cardLeft};`;
-    } else {
-      // Target not found — fall back to center
-      cardStyle = "top:50%;left:50%;transform:translate(-50%,-50%);";
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Wait for scroll to settle before positioning the highlight
+      setTimeout(buildTutorialCard, 350);
+      return;
     }
-  } else {
-    cardStyle = "top:50%;left:50%;transform:translate(-50%,-50%);";
   }
-
-  overlay.innerHTML = `
-    ${highlightHtml}
-    <div class="tutorial-card" style="${cardStyle}">
-      <div class="tutorial-step-indicator">Step ${stepNum} of ${total}</div>
-      <h3>${step.title}</h3>
-      <p>${step.text}</p>
-      <div class="tutorial-actions">
-        <button class="btn" data-action="tutorial-next"
-          style="color:var(--green);border-color:var(--green);padding:3px 14px;font-size:11px;">
-          ${G.tutorialStep === total - 1 ? "Finish" : "Next →"}
-        </button>
-        ${G.tutorialStep < total - 1
-          ? `<button class="btn" data-action="tutorial-skip"
-               style="color:var(--text-dim);border-color:var(--border);padding:3px 10px;font-size:11px;">
-               Skip
-             </button>`
-          : ""}
-      </div>
-    </div>`;
+  buildTutorialCard();
 }
 
 function renderAll() {
