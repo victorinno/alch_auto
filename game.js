@@ -438,6 +438,10 @@ const G = {
   maxAlembics: 5,               // Maximum number of Alembics
   alembicConfigs: {},           // { recipeId: { recipeId, allocatedAlembics, inputBuffers, outputBuffer, speedBoost, currentCraft } }
 
+  // Tutorial State
+  tutorialStep: -1,   // -1 = inactive, 0+ = current step index
+  tutorialSeen: false, // true after first completion/skip
+
   // Debug Mode (session-only, does not persist)
   debugMode: false              // Toggle with F2 key
 };
@@ -3184,6 +3188,141 @@ function renderFooter() {
   }
 }
 
+// ─────────────────────────────────────────────────────
+// TUTORIAL SYSTEM
+// ─────────────────────────────────────────────────────
+
+const TUTORIAL_STEPS = [
+  {
+    title: "Welcome, Alchemist!",
+    text: "Welcome to Alchemist's Automatons! You'll craft Golems, gather resources, brew potions, and automate your workshop. Let's walk through the basics.",
+    targetSelector: null  // center modal, no highlight
+  },
+  {
+    title: "Your Resources",
+    text: "These are your resources. You start with Clay and Herbs — just enough to craft your first Golem. Resources are gathered by Golems or by you manually.",
+    targetSelector: "#resources-display"
+  },
+  {
+    title: "Craft a Golem",
+    text: "Here you craft Golems. Click 'Craft' on the Clay Golem to build your first one. Golems are your workforce — they do everything automatically!",
+    targetSelector: "#golem-recipes"
+  },
+  {
+    title: "Your Golem Roster",
+    text: "Your Golems appear here once crafted. An idle Golem is waiting for a job. You can upgrade, recall, or dismantle them from this panel.",
+    targetSelector: "#golem-roster"
+  },
+  {
+    title: "Send Golems to Zones",
+    text: "Zones are where Golems gather resources. Click 'Send' on an empty slot to dispatch your idle Golem. The Whispering Forest is safe and yields Clay, Herbs, and Crystals.",
+    targetSelector: "#zones-panel"
+  },
+  {
+    title: "Event Log",
+    text: "All activity is logged here — resource gains, Golem trips, and important events. Keep an eye on it to track what's happening in your workshop.",
+    targetSelector: "#event-log-container"
+  },
+  {
+    title: "You're Ready!",
+    text: "That's the core loop: Craft Golems → Send to Zones → Gather Resources → Brew Potions → Upgrade. You can replay this tutorial anytime from the footer. Good luck!",
+    targetSelector: null
+  }
+];
+
+function startTutorial() {
+  // Make sure we're on the main workshop view
+  if (G.currentView !== "workshop") {
+    hideAlembicPanel && G.currentView === "alembics" && hideAlembicPanel();
+    hideExpeditionPanel && G.currentView === "expeditions" && hideExpeditionPanel();
+    if (G.currentView === "researchlab") hideResearchLab();
+    if (G.currentView === "worldmap") {
+      document.getElementById("worldmap-panel").style.display = "none";
+      document.getElementById("main-layout").style.display = "grid";
+      G.currentView = "workshop";
+    }
+  }
+  G.tutorialStep = 0;
+  renderTutorial();
+}
+
+function nextTutorialStep() {
+  G.tutorialStep++;
+  if (G.tutorialStep >= TUTORIAL_STEPS.length) {
+    endTutorial();
+  } else {
+    renderTutorial();
+  }
+}
+
+function endTutorial() {
+  G.tutorialStep = -1;
+  G.tutorialSeen = true;
+  const overlay = document.getElementById("tutorial-overlay");
+  if (overlay) { overlay.innerHTML = ""; overlay.classList.remove("active"); }
+  saveGame();
+}
+
+function renderTutorial() {
+  const overlay = document.getElementById("tutorial-overlay");
+  if (!overlay) return;
+  if (G.tutorialStep < 0) { overlay.innerHTML = ""; overlay.classList.remove("active"); return; }
+
+  const step = TUTORIAL_STEPS[G.tutorialStep];
+  const stepNum = G.tutorialStep + 1;
+  const total = TUTORIAL_STEPS.length;
+
+  overlay.classList.add("active");
+
+  let highlightHtml = "";
+  let cardStyle = "";
+
+  if (step.targetSelector) {
+    const target = document.querySelector(step.targetSelector);
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      const pad = 6;
+      const top = rect.top - pad;
+      const left = rect.left - pad;
+      const width = rect.width + pad * 2;
+      const height = rect.height + pad * 2;
+      highlightHtml = `<div class="tutorial-highlight" style="top:${top}px;left:${left}px;width:${width}px;height:${height}px;"></div>`;
+
+      // Position card to avoid overlap — prefer below, fallback above
+      const cardTop = (top + height + 12 + 160 < window.innerHeight)
+        ? `${top + height + 12}px`
+        : `${Math.max(8, top - 170)}px`;
+      const cardLeft = Math.min(Math.max(8, left), window.innerWidth - 360) + "px";
+      cardStyle = `top:${cardTop};left:${cardLeft};`;
+    } else {
+      // Target not found — fall back to center
+      cardStyle = "top:50%;left:50%;transform:translate(-50%,-50%);";
+    }
+  } else {
+    cardStyle = "top:50%;left:50%;transform:translate(-50%,-50%);";
+  }
+
+  overlay.innerHTML = `
+    ${highlightHtml}
+    <div class="tutorial-card" style="${cardStyle}">
+      <div class="tutorial-step-indicator">Step ${stepNum} of ${total}</div>
+      <h3>${step.title}</h3>
+      <p>${step.text}</p>
+      <div class="tutorial-actions">
+        <button class="btn" data-action="tutorial-next"
+          style="color:var(--green);border-color:var(--green);padding:3px 14px;font-size:11px;">
+          ${G.tutorialStep === total - 1 ? "Finish" : "Next →"}
+        </button>
+        ${G.tutorialStep < total - 1
+          ? `<button class="btn" data-action="tutorial-skip"
+               style="color:var(--text-dim);border-color:var(--border);padding:3px 10px;font-size:11px;">
+               Skip
+             </button>`
+          : ""}
+      </div>
+    </div>`;
+}
+
 function renderAll() {
   renderResources();
   renderRecipes();
@@ -3319,6 +3458,8 @@ function saveGame() {
       alembicConfigs: G.alembicConfigs,
       intelligentGolemsUnlocked: G.intelligentGolemsUnlocked,
       explorerGolemsUnlocked: G.explorerGolemsUnlocked,
+      tutorialStep: G.tutorialStep,
+      tutorialSeen: G.tutorialSeen,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -3420,6 +3561,8 @@ function loadGame() {
     G.autoResearch = save.autoResearch || false;
     G.intelligentGolemsUnlocked = save.intelligentGolemsUnlocked || false;
     G.explorerGolemsUnlocked = save.explorerGolemsUnlocked || false;
+    G.tutorialStep = save.tutorialStep !== undefined ? save.tutorialStep : -1;
+    G.tutorialSeen = save.tutorialSeen || false;
 
     // Handle in-progress distillation (complete if finished during offline)
     if (G.distiller && G.distiller.currentProcessing) {
@@ -3706,6 +3849,11 @@ function setupEventDelegation() {
     } else if (action === 'free-all-feeders') {
       freeAllFeeders();
 
+    // Tutorial Actions
+    } else if (action === 'start-tutorial') { startTutorial();
+    } else if (action === 'tutorial-next')  { nextTutorialStep();
+    } else if (action === 'tutorial-skip')  { endTutorial();
+
     // Debug Actions
     } else if (action === 'debug-give-resource')     { debugGiveResource();
     } else if (action === 'debug-skip-time')         { debugSkipTime();
@@ -3936,6 +4084,11 @@ window.addEventListener("DOMContentLoaded", function() {
 
   renderAll();
   setupEventDelegation();
+
+  // Auto-start tutorial for new players
+  if (!G.tutorialSeen) {
+    setTimeout(startTutorial, 500);
+  }
 
   // Add F2 debug mode toggle listener
   window.addEventListener("keydown", function(e) {

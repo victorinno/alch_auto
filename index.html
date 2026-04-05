@@ -133,12 +133,18 @@
     <!-- DEBUG PANEL (hidden by default, toggle with F2) -->
     <div id="debug-panel" style="display:none;position:fixed;top:60px;right:10px;z-index:10000;"></div>
 
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay"></div>
+
     <!-- FOOTER -->
     <footer id="footer-bar">
       <span id="footer-time"></span>
       <span id="footer-prestige"></span>
+      <button data-action="start-tutorial"
+        style="font-size:10px;padding:2px 10px;background:transparent;border:1px solid var(--green);color:var(--green);font-family:monospace;cursor:pointer;margin-left:12px;"
+        >? Tutorial</button>
       <button data-action="reset-game"
-        style="font-size:10px;padding:2px 10px;background:transparent;border:1px solid #ff4444;color:#ff4444;font-family:monospace;cursor:pointer;margin-left:12px;"
+        style="font-size:10px;padding:2px 10px;background:transparent;border:1px solid #ff4444;color:#ff4444;font-family:monospace;cursor:pointer;margin-left:8px;"
         >⚠ Reset</button>
     </footer>
   </div>
