@@ -18,7 +18,14 @@
       "Bash(git commit:*)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(Feeders\" button is added at the bottom of the Alembic panel showing:*)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d.get\\(k\\) for k in ['main','module','exports','types']}, indent=2\\)\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d.get\\(k\\) for k in ['main','module','exports','types']}, indent=2\\)\\)\")",
+      "Bash(npx --version)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/nodejs\")",
+      "Bash(rm /c/Users/rotc_/Documents/Projetos/alch_auto/tests/stagehand-game.spec.js)",
+      "Bash(rm /c/Users/rotc_/Documents/Projetos/alch_auto/stagehand.config.js)",
+      "Bash(git rm:*)",
+      "Bash(cmd /c \"npx playwright test --reporter=line 2>&1\")",
+      "Bash(cmd /c \"cd C:\\\\\\\\Users\\\\\\\\rotc_\\\\\\\\Documents\\\\\\\\Projetos\\\\\\\\alch_auto && npx playwright test --reporter=line\")"
     ],
     "deny": [],
     "ask": []
