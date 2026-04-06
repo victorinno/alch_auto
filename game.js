@@ -24,6 +24,7 @@ const RESOURCES = {
   philosophers_draft:          { name: "Philosopher's Draft",           icon: "🧪", color: "#ff6688" },
   soul_crystal:                { name: "Soul Crystal",                  icon: "💠", color: "#ffddff" },
   divination_shard:            { name: "Divination Shard",              icon: "🔮", color: "#cc44ff" },
+  artifact:                    { name: "Ancient Artifact",              icon: "🏺", color: "#ffb347" },
 };
 
 // maxSlots = max golems that can work this zone simultaneously
@@ -35,6 +36,38 @@ const ZONES = [
   { id: "ruins",   name: "Ancient Ruins",      icon: "🏛️",  ascii: "ruins",  yields: ["moonstone","essence"],     danger: 2, maxSlots: 2 },
   { id: "volcano", name: "Ember Volcano",      icon: "🌋",  ascii: "volcano",yields: ["sulfur","moonstone"],      danger: 3, maxSlots: 1 },
 ];
+
+// ─────────────────────────────────────────────────────
+// SPECIAL TILE TYPES
+// ─────────────────────────────────────────────────────
+
+const SPECIAL_TILE_TYPES = {
+  merchant: { icon: "🛒", label: "Merchant Caravan", spawnChance: 0.15,
+    desc: "A travelling merchant offering rare trades. Trades once then moves on." },
+  shrine:   { icon: "⛩️",  label: "Ancient Shrine",   spawnChance: 0.10,
+    desc: "An ancient shrine radiating power. Grants a 10-minute global buff." },
+  boss:     { icon: "💀", label: "Boss Lair",         spawnChance: 0.08,
+    desc: "A dangerous lair. Send tier-2+ golems to clear it for artifacts." },
+};
+
+// 5 possible merchant trades; 3 chosen at random each visit
+const MERCHANT_CATALOG = [
+  { id: "mc_1", offer: { res: "moonstone", amt: 3 },  cost: { res: "gold",    amt: 80  }, label: "3🌙 for 80🪙" },
+  { id: "mc_2", offer: { res: "essence",  amt: 15 }, cost: { res: "gold",    amt: 60  }, label: "15✨ for 60🪙" },
+  { id: "mc_3", offer: { res: "crystals", amt: 20 }, cost: { res: "sulfur",  amt: 10  }, label: "20💎 for 10🔥" },
+  { id: "mc_4", offer: { res: "artifact", amt: 1  }, cost: { res: "moonstone",amt: 5  }, label: "1🏺 for 5🌙" },
+  { id: "mc_5", offer: { res: "gold",     amt: 120 }, cost: { res: "essence", amt: 20  }, label: "120🪙 for 20✨" },
+];
+
+// Shrine buff magnitudes
+const SHRINE_BUFF = {
+  golemSpeedMult:    1.5,   // ×1.5 travel speed
+  golemBonusCapacity: 5,    // +5 capacity
+  alchemySpeedMult:  1.5,   // ×1.5 alchemy speed
+  essenceMult:       1.5,   // ×1.5 essence production
+  craftCostMult:     0.75,  // ×0.75 craft cost (25% cheaper)
+  duration:          600000, // 10 minutes in ms
+};
 
 // ─────────────────────────────────────────────────────
 // ZONE RESOURCE DEPLETION
@@ -395,7 +428,7 @@ const G = {
   resources: {
     gold: 5, essence: 0, herbs: 5, crystals: 0, iron: 0, moonstone: 0, sulfur: 0, clay: 8,
     condensed_knowledge_alchemy: 0, prepared_knowledge_alchemy: 0, philosophers_draft: 0, soul_crystal: 0,
-    divination_shard: 0, condensed_knowledge_divination: 0
+    divination_shard: 0, condensed_knowledge_divination: 0, artifact: 0
   },
   golems: [],
   nextGolemId: 1,
@@ -437,6 +470,12 @@ const G = {
   alembicsBuilt: 0,             // Number of Alembics built (0-5)
   maxAlembics: 5,               // Maximum number of Alembics
   alembicConfigs: {},           // { recipeId: { recipeId, allocatedAlembics, inputBuffers, outputBuffer, speedBoost, currentCraft } }
+
+  // World Map Expansion State
+  mapRing: 0,                  // 0=3×3, 1=5×5, 2=7×7, 3=9×9 (max)
+  tileData: {},                // { "row,col": { type, merchantOffers, shrineActivatedAt, bossRespawnAt } }
+  activeShrineBuffs: [],       // [{ endTime, origSpeed, origCapacity, origAlchemy, origEssence, origCraft }]
+  bossRespawnQueue: [],        // [{ spawnAt }] — pending boss respawns
 
   // Tutorial State
   tutorialStep: -1,   // -1 = inactive, 0+ = current step index
@@ -576,26 +615,53 @@ function completeExploration() {
   const { row, col } = G.explorationTarget;
   const tile = G.worldMap.tiles[row][col];
 
-  // Randomly assign zone type
-  const zoneTypes = ["forest", "mine", "swamp", "ruins", "volcano"];
-  const zoneType = randomFrom(zoneTypes);
-  const zone = ZONES.find(z => z.id === zoneType);
+  // Roll for special tile
+  const roll = Math.random();
+  let specialType = null;
+  let cumulative = 0;
+  for (const [type, def] of Object.entries(SPECIAL_TILE_TYPES)) {
+    cumulative += def.spawnChance;
+    if (roll < cumulative) { specialType = type; break; }
+  }
 
-  // Calculate resource pool based on distance
-  const basePool = zone.resourcePool ? zone.resourcePool.total : 100000;
-  const scaledTotal = Math.floor(basePool * (1 + tile.distance * 0.5));
+  if (specialType) {
+    tile.explored = true;
+    tile.zoneType = "special_" + specialType;
+    tile.resourcePool = null;
+    // Initialize tile data
+    const key = `${row},${col}`;
+    if (specialType === "merchant") {
+      G.tileData[key] = { type: specialType, merchantOffers: pickMerchantOffers() };
+    } else {
+      G.tileData[key] = { type: specialType };
+    }
+    // Reset alchemist state
+    G.alchemistState = "idle";
+    G.explorationTarget = null;
+    G.explorationEndTime = null;
+    log(`✅ Discovered ${SPECIAL_TILE_TYPES[specialType].label}! ${SPECIAL_TILE_TYPES[specialType].icon}`, "great");
+  } else {
+    // Randomly assign zone type
+    const zoneTypes = ["forest", "mine", "swamp", "ruins", "volcano"];
+    const zoneType = randomFrom(zoneTypes);
+    const zone = ZONES.find(z => z.id === zoneType);
 
-  // Reveal tile
-  tile.explored = true;
-  tile.zoneType = zoneType;
-  tile.resourcePool = { total: scaledTotal, byType: {} };
+    // Calculate resource pool based on distance
+    const basePool = zone.resourcePool ? zone.resourcePool.total : 100000;
+    const scaledTotal = Math.floor(basePool * (1 + tile.distance * 0.5));
 
-  // Reset alchemist state
-  G.alchemistState = "idle";
-  G.explorationTarget = null;
-  G.explorationEndTime = null;
+    // Reveal tile
+    tile.explored = true;
+    tile.zoneType = zoneType;
+    tile.resourcePool = { total: scaledTotal, byType: {} };
 
-  log(`✅ Discovered ${zone.name}! (${fmtResources(scaledTotal)} resources)`, "great");
+    // Reset alchemist state
+    G.alchemistState = "idle";
+    G.explorationTarget = null;
+    G.explorationEndTime = null;
+
+    log(`✅ Discovered ${zone.name}! (${fmtResources(scaledTotal)} resources)`, "great");
+  }
 
   saveGame();
   renderWorldMap();
@@ -633,6 +699,303 @@ function updateExplorationCountdown(now) {
   const el = document.getElementById("exploration-countdown");
   if (el) {
     el.textContent = `${remaining}s`;
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// SPECIAL TILES & MAP EXPANSION
+// ─────────────────────────────────────────────────────
+
+function pickMerchantOffers() {
+  const shuffled = [...MERCHANT_CATALOG].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 3).map(o => o.id);
+}
+
+function getMapSize() {
+  if (!G.worldMap || !G.worldMap.tiles) return 3;
+  return G.worldMap.tiles.length;
+}
+
+function expandWorldMap() {
+  const currentSize = getMapSize();
+  const maxSize = 9;
+  if (currentSize >= maxSize) { log("Map already at maximum size!", "warn"); return; }
+
+  const ring = G.mapRing + 1;
+  const cost = { moonstone: ring, pure_knowledge: 2 };
+  if (!canAfford(cost)) { log("Not enough resources to expand the map!", "warn"); return; }
+  spend(cost);
+
+  const newSize = currentSize + 2;
+  const offset = 1; // shift existing tiles by 1 in each direction
+
+  // Build new tile grid
+  const newTiles = [];
+  for (let r = 0; r < newSize; r++) {
+    newTiles[r] = [];
+    for (let c = 0; c < newSize; c++) {
+      const oldR = r - offset;
+      const oldC = c - offset;
+      if (oldR >= 0 && oldR < currentSize && oldC >= 0 && oldC < currentSize) {
+        // Copy existing tile, update position
+        const t = G.worldMap.tiles[oldR][oldC];
+        newTiles[r][c] = { ...t, position: [r, c] };
+      } else {
+        // New border tile — unknown
+        const centerR = Math.floor(newSize / 2);
+        const centerC = Math.floor(newSize / 2);
+        const distance = Math.round(Math.sqrt((r - centerR)**2 + (c - centerC)**2) * 10) / 10;
+        newTiles[r][c] = { explored: false, zoneType: null, resourcePool: null, position: [r, c], distance };
+      }
+    }
+  }
+
+  // Remap tileData keys to new coordinates
+  const newTileData = {};
+  for (const [key, data] of Object.entries(G.tileData)) {
+    const [or, oc] = key.split(",").map(Number);
+    newTileData[`${or + offset},${oc + offset}`] = data;
+  }
+  G.tileData = newTileData;
+
+  G.worldMap = { tiles: newTiles };
+  G.mapRing = ring;
+
+  log(`🗺️ Map expanded to ${newSize}×${newSize}! New regions await exploration.`, "great");
+  saveGame();
+  renderWorldMap();
+  renderResources();
+}
+
+function interactSpecialTile(row, col) {
+  const key = `${row},${col}`;
+  const data = G.tileData[key];
+  if (!data) return;
+
+  if (data.type === "merchant") interactMerchant(row, col);
+  else if (data.type === "shrine") interactShrine(row, col);
+  else if (data.type === "boss") interactBoss(row, col);
+}
+
+function interactMerchant(row, col) {
+  const key = `${row},${col}`;
+  const data = G.tileData[key];
+  if (!data || !data.merchantOffers) return;
+
+  // Build offer HTML into the world map panel
+  const offersHtml = data.merchantOffers.map(offerId => {
+    const offer = MERCHANT_CATALOG.find(o => o.id === offerId);
+    if (!offer) return "";
+    const offerRes = RESOURCES[offer.offer.res];
+    const costRes  = RESOURCES[offer.cost.res];
+    const canDo    = (G.resources[offer.cost.res] || 0) >= offer.cost.amt;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px;border:1px solid var(--border);margin-bottom:4px;background:var(--bg3);">
+      <span style="font-size:12px;">${offerRes.icon} +${offer.offer.amt} ${offerRes.name}</span>
+      <span style="color:var(--text-dim);font-size:11px;">for</span>
+      <span style="font-size:12px;">${costRes.icon} ${offer.cost.amt} ${costRes.name}</span>
+      <button class="btn-sm" data-action="merchant-trade" data-row="${row}" data-col="${col}" data-offer="${offerId}"
+        ${canDo ? "" : "disabled"} style="color:var(--green);">Trade</button>
+    </div>`;
+  }).join("");
+
+  const panel = document.getElementById("worldmap-panel");
+  if (!panel) return;
+
+  // Inject merchant panel below the grid
+  let existing = document.getElementById("special-tile-panel");
+  if (!existing) {
+    existing = document.createElement("div");
+    existing.id = "special-tile-panel";
+    panel.appendChild(existing);
+  }
+  existing.innerHTML = `
+    <div style="margin-top:16px;padding:12px;border:1px solid var(--amber);background:var(--bg2);max-width:480px;margin-left:auto;margin-right:auto;">
+      <h3 style="color:var(--amber);margin:0 0 8px;">🛒 Merchant Caravan</h3>
+      <p style="color:var(--text-dim);font-size:11px;margin-bottom:10px;">Trade once and the caravan moves on.</p>
+      ${offersHtml}
+      <button class="btn" data-action="close-special-panel" style="margin-top:8px;font-size:11px;color:var(--text-dim);">Close</button>
+    </div>`;
+}
+
+function executeMerchantTrade(row, col, offerId) {
+  const key = `${row},${col}`;
+  const data = G.tileData[key];
+  if (!data || data.type !== "merchant") return;
+
+  const offer = MERCHANT_CATALOG.find(o => o.id === offerId);
+  if (!offer) return;
+  if ((G.resources[offer.cost.res] || 0) < offer.cost.amt) { log("Not enough resources for that trade!", "warn"); return; }
+
+  spend({ [offer.cost.res]: offer.cost.amt });
+  gain({ [offer.offer.res]: offer.offer.amt });
+
+  const offerRes = RESOURCES[offer.offer.res];
+  const costRes  = RESOURCES[offer.cost.res];
+  log(`🛒 Traded ${offer.cost.amt}${costRes.icon} for ${offer.offer.amt}${offerRes.icon}. Caravan moves on...`, "good");
+
+  // Remove tile and respawn as hidden merchant on a random unknown tile
+  const tile = G.worldMap.tiles[row][col];
+  tile.explored = false;
+  tile.zoneType = null;
+  tile.resourcePool = null;
+  delete G.tileData[key];
+
+  // Find a random unexplored tile to seed a hidden merchant
+  const unknown = [];
+  G.worldMap.tiles.forEach((rowArr, r) => rowArr.forEach((t, c) => {
+    if (!t.explored && !(r === row && c === col)) unknown.push([r, c]);
+  }));
+  if (unknown.length > 0) {
+    const [nr, nc] = randomFrom(unknown);
+    G.tileData[`${nr},${nc}`] = { type: "merchant", merchantOffers: null, hiddenUntilExplored: true };
+  }
+
+  saveGame();
+  renderResources();
+  renderWorldMap();
+}
+
+function interactShrine(row, col) {
+  // If buff already active, show remaining time
+  if (G.activeShrineBuffs.length > 0) {
+    const remaining = Math.ceil((G.activeShrineBuffs[0].endTime - Date.now()) / 1000);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    log(`⛩️ Shrine buff already active! ${mins}m ${secs}s remaining.`, "info");
+    return;
+  }
+
+  // Apply buff — store originals first
+  const orig = {
+    endTime: Date.now() + SHRINE_BUFF.duration,
+    origSpeed:    G.golemSpeedMult,
+    origCapacity: G.golemBonusCapacity,
+    origAlchemy:  G.alchemySpeedMult,
+    origEssence:  G.essenceMult,
+    origCraft:    G.craftCostMult,
+  };
+  G.activeShrineBuffs = [orig];
+
+  G.golemSpeedMult    *= SHRINE_BUFF.golemSpeedMult;
+  G.golemBonusCapacity += SHRINE_BUFF.golemBonusCapacity;
+  G.alchemySpeedMult  *= SHRINE_BUFF.alchemySpeedMult;
+  G.essenceMult       *= SHRINE_BUFF.essenceMult;
+  G.craftCostMult     *= SHRINE_BUFF.craftCostMult;
+
+  log("⛩️ Ancient Shrine activated! All bonuses boosted for 10 minutes!", "great");
+  saveGame();
+  renderFooter();
+  renderWorldMap();
+}
+
+function expireShrineBuffs(now) {
+  if (G.activeShrineBuffs.length === 0) return;
+  const buff = G.activeShrineBuffs[0];
+  if (now < buff.endTime) return;
+
+  // Revert to originals
+  G.golemSpeedMult    = buff.origSpeed;
+  G.golemBonusCapacity = buff.origCapacity;
+  G.alchemySpeedMult  = buff.origAlchemy;
+  G.essenceMult       = buff.origEssence;
+  G.craftCostMult     = buff.origCraft;
+
+  G.activeShrineBuffs = [];
+  log("⛩️ Shrine buff has expired.", "info");
+  renderFooter();
+}
+
+function interactBoss(row, col) {
+  const key = `${row},${col}`;
+  const data = G.tileData[key];
+  if (!data || data.type !== "boss") return;
+
+  // Check if lair is on respawn cooldown
+  if (data.bossRespawnAt && Date.now() < data.bossRespawnAt) {
+    const remaining = Math.ceil((data.bossRespawnAt - Date.now()) / 1000);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    log(`💀 Boss Lair is recovering... ${mins}m ${secs}s remaining.`, "info");
+    return;
+  }
+
+  // Find eligible idle golems (tier 2+, danger_resist >= 1)
+  const eligible = G.golems.filter(g => {
+    const def = GOLEM_TYPES[g.typeId];
+    return g.state === "idle" && def && def.tier >= 2 && !def.role;
+  });
+
+  if (eligible.length < 2) {
+    log("💀 Boss Lair requires 2+ idle tier-2 golems (Iron or higher)!", "warn");
+    return;
+  }
+
+  // Send top 2 eligible golems
+  const sent = eligible.slice(0, 2);
+  const expeditionEnd = Date.now() + 120000; // 2 minutes
+
+  sent.forEach(golem => {
+    golem.state = "traveling";
+    golem.tripPhase = "out";
+    golem.zoneId = `boss_${row}_${col}`;
+    golem.tripStart = Date.now();
+    golem.tripEnd = expeditionEnd;
+    golem.collected = {};
+    golem.bossExpedition = { row, col };
+  });
+
+  log(`💀 Sent ${sent.map(g => g.name).join(" & ")} to clear the Boss Lair! (2 min)`, "good");
+  saveGame();
+  renderWorldMap();
+  renderGolemRoster();
+}
+
+function completeBossExpedition(golem) {
+  const { row, col } = golem.bossExpedition;
+  const key = `${row},${col}`;
+
+  // Award artifact
+  gain({ artifact: 1 });
+  log(`🏺 ${golem.name} returned from the Boss Lair with an Ancient Artifact!`, "great");
+
+  // Set respawn timer on the tile
+  if (G.tileData[key]) {
+    G.tileData[key].bossRespawnAt = Date.now() + 1800000; // 30 minutes
+    G.bossRespawnQueue.push({ spawnAt: Date.now() + 1800000 });
+  }
+
+  golem.state = "idle";
+  golem.zoneId = null;
+  golem.tripStart = null;
+  golem.tripEnd = null;
+  golem.collected = {};
+  golem.bossExpedition = null;
+
+  saveGame();
+  renderResources();
+  renderWorldMap();
+}
+
+function tickWorldMap(now) {
+  // Expire shrine buffs
+  expireShrineBuffs(now);
+
+  // Process boss respawn queue
+  if (G.bossRespawnQueue.length > 0) {
+    G.bossRespawnQueue = G.bossRespawnQueue.filter(entry => {
+      if (now < entry.spawnAt) return true;
+      // Spawn a new boss on a random unknown tile
+      const unknown = [];
+      G.worldMap.tiles.forEach((rowArr, r) => rowArr.forEach((t, c) => {
+        if (!t.explored) unknown.push([r, c]);
+      }));
+      if (unknown.length > 0) {
+        const [nr, nc] = randomFrom(unknown);
+        G.tileData[`${nr},${nc}`] = { type: "boss", hiddenUntilExplored: true };
+        log("💀 A new Boss Lair has appeared somewhere on the map...", "warn");
+      }
+      return false;
+    });
   }
 }
 
@@ -1724,12 +2087,21 @@ function tickGolems(now) {
     }
 
     if (golem.state === "idle") continue;
+
+    // Boss expedition — simple timer, no gather phase
+    if (golem.bossExpedition && golem.state === "traveling" && now >= golem.tripEnd) {
+      completeBossExpedition(golem);
+      stateChanged = true;
+      continue;
+    }
+    if (golem.bossExpedition) continue; // still traveling to boss
+
     const zone = ZONES.find(z => z.id === golem.zoneId);
     const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
 
     if (golem.state === "traveling" && golem.tripPhase === "out" && now >= golem.tripEnd) {
       golem.state = "gathering"; golem.tripStart = now; golem.tripEnd = now + 3000;
-      log(`⛏️  ${golem.name} arrived at ${zone.name}.`, "info");
+      log(`⛏️  ${golem.name} arrived at ${zone?.name || "zone"}.`, "info");
       updateZoneGolemRow(golem); stateChanged = true;
 
     } else if (golem.state === "gathering" && now >= golem.tripEnd) {
@@ -1917,23 +2289,46 @@ function renderWorldMap() {
     statusMsg = `<p style="text-align:center;color:var(--green);margin:10px 0;">🔍 Exploring distant lands...</p>`;
   }
 
+  const mapSize = getMapSize();
+
+  // Shrine buff timer
+  let shrineBar = "";
+  if (G.activeShrineBuffs.length > 0) {
+    const remaining = Math.max(0, Math.ceil((G.activeShrineBuffs[0].endTime - Date.now()) / 1000));
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    shrineBar = `<p style="text-align:center;color:var(--amber);margin:4px 0;font-size:12px;">✨ Shrine Buff active: ${mins}m ${secs}s remaining</p>`;
+  }
+
+  // Expand button
+  const ringCost = G.mapRing + 1;
+  const expandCost = { moonstone: ringCost, pure_knowledge: 2 };
+  const canExpand = mapSize < 9 && canAfford(expandCost);
+  const expandBtn = mapSize < 9
+    ? `<button class="btn" data-action="expand-map" style="margin-top:10px;${canExpand ? "color:var(--green);" : "color:var(--text-dim);"}"
+        ${canExpand ? "" : "disabled"}>
+        🗺️ Expand Map (${ringCost}🌙 + 2 Pure Knowledge)
+       </button>`
+    : `<p style="text-align:center;color:var(--text-dim);font-size:11px;margin-top:8px;">Map at maximum size (9×9)</p>`;
+
   let html = `
     <div class="worldmap-header">
       <button class="btn" data-action="show-workshop" style="margin-bottom:10px;">← Back to Workshop</button>
       <h2 style="text-align:center;color:var(--green);margin-bottom:10px;">🗺️ World Map</h2>
+      ${shrineBar}
       ${statusMsg}
     </div>
-    <div class="worldmap-grid">
+    <div class="worldmap-grid" style="grid-template-columns:repeat(${mapSize},1fr);">
   `;
 
-  for (let row = 0; row < 3; row++) {
-    for (let col = 0; col < 3; col++) {
+  for (let row = 0; row < mapSize; row++) {
+    for (let col = 0; col < mapSize; col++) {
       const tile = G.worldMap.tiles[row][col];
       html += renderTile(tile, row, col);
     }
   }
 
-  html += '</div>';
+  html += `</div><div style="text-align:center;">${expandBtn}</div>`;
   panel.innerHTML = html;
 }
 
@@ -1947,6 +2342,33 @@ function renderTile(tile, row, col) {
         <div class="tile-icon">🏭</div>
         <div class="tile-name">Workshop</div>
         <div class="tile-resources" style="color:var(--text-dim);font-size:10px;">Click to return</div>
+      </div>
+    `;
+  }
+
+  // Special tile
+  if (explored && zoneType && zoneType.startsWith("special_")) {
+    const specialKey = zoneType.replace("special_", "");
+    const def = SPECIAL_TILE_TYPES[specialKey];
+    if (!def) return `<div class="worldmap-tile"><span style="color:var(--red);">Error</span></div>`;
+
+    const key = `${row},${col}`;
+    const data = G.tileData[key] || {};
+    let subInfo = def.desc;
+
+    if (specialKey === "boss" && data.bossRespawnAt && Date.now() < data.bossRespawnAt) {
+      const rem = Math.ceil((data.bossRespawnAt - Date.now()) / 1000);
+      subInfo = `Recovering: ${Math.floor(rem/60)}m ${rem%60}s`;
+    } else if (specialKey === "shrine" && G.activeShrineBuffs.length > 0) {
+      const rem = Math.ceil((G.activeShrineBuffs[0].endTime - Date.now()) / 1000);
+      subInfo = `Buff active: ${Math.floor(rem/60)}m ${rem%60}s`;
+    }
+
+    return `
+      <div class="worldmap-tile clickable" data-action="interact-special-tile" data-row="${row}" data-col="${col}">
+        <div class="tile-icon">${def.icon}</div>
+        <div class="tile-name">${def.label}</div>
+        <div class="tile-resources" style="font-size:10px;color:var(--amber);">${subInfo}</div>
       </div>
     `;
   }
@@ -3184,7 +3606,14 @@ function renderFooter() {
     const wl = WORKSHOP_LEVELS[G.workshopLevel];
     const busy = G.golems.filter(g => g.state !== "idle").length;
     const regularCount = G.golems.filter(g => !GOLEM_TYPES[g.typeId]?.role).length;
-    el.textContent = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${regularCount}/${wl.maxGolems} (${busy} active) | Time: ${fmtTime(G.totalTime)}`;
+    let text = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${regularCount}/${wl.maxGolems} (${busy} active) | Time: ${fmtTime(G.totalTime)}`;
+    if (G.activeShrineBuffs.length > 0) {
+      const remaining = Math.max(0, Math.ceil((G.activeShrineBuffs[0].endTime - Date.now()) / 1000));
+      const mins = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      text += ` | ✨ Shrine: ${mins}m ${secs}s`;
+    }
+    el.textContent = text;
   }
 }
 
@@ -3469,6 +3898,10 @@ function saveGame() {
       alembicConfigs: G.alembicConfigs,
       intelligentGolemsUnlocked: G.intelligentGolemsUnlocked,
       explorerGolemsUnlocked: G.explorerGolemsUnlocked,
+      mapRing: G.mapRing,
+      tileData: G.tileData,
+      activeShrineBuffs: G.activeShrineBuffs,
+      bossRespawnQueue: G.bossRespawnQueue,
       tutorialStep: G.tutorialStep,
       tutorialSeen: G.tutorialSeen,
       savedAt: Date.now(),
@@ -3572,6 +4005,11 @@ function loadGame() {
     G.autoResearch = save.autoResearch || false;
     G.intelligentGolemsUnlocked = save.intelligentGolemsUnlocked || false;
     G.explorerGolemsUnlocked = save.explorerGolemsUnlocked || false;
+    G.mapRing = save.mapRing || 0;
+    G.tileData = save.tileData || {};
+    G.activeShrineBuffs = save.activeShrineBuffs || [];
+    G.bossRespawnQueue = save.bossRespawnQueue || [];
+    if (G.resources.artifact === undefined) G.resources.artifact = 0;
     G.tutorialStep = save.tutorialStep !== undefined ? save.tutorialStep : -1;
     G.tutorialSeen = save.tutorialSeen || false;
 
@@ -3760,6 +4198,7 @@ function gameLoop() {
   tickGolems(now);
   tickAlchemy(now);
   tickExploration(now);
+  tickWorldMap(now);
   tickDistiller(now);
   tickResearch(now);
   tickAlembics(now);
@@ -3818,6 +4257,10 @@ function setupEventDelegation() {
     } else if (action === 'show-workshop')  { showWorkshop();
     } else if (action === 'explore-tile')   { startExploration(Number(btn.dataset.row), Number(btn.dataset.col));
     } else if (action === 'cancel-exploration') { cancelExploration();
+    } else if (action === 'interact-special-tile') { interactSpecialTile(Number(btn.dataset.row), Number(btn.dataset.col));
+    } else if (action === 'merchant-trade') { executeMerchantTrade(Number(btn.dataset.row), Number(btn.dataset.col), btn.dataset.offer);
+    } else if (action === 'close-special-panel') { const p = document.getElementById("special-tile-panel"); if (p) p.innerHTML = "";
+    } else if (action === 'expand-map') { expandWorldMap();
 
     // Research Lab Actions
     } else if (action === 'show-researchlab') { showResearchLab();
