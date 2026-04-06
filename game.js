@@ -3645,7 +3645,7 @@ const TUTORIAL_STEPS = [
   {
     title: "Send Golems to Zones",
     text: "Zones are where Golems gather resources. Click 'Send' on an empty slot to dispatch your idle Golem. The Whispering Forest is safe and yields Clay, Herbs, and Crystals.",
-    targetSelector: "#zones-panel"
+    targetSelector: "#panel-zones"
   },
   {
     title: "Event Log",
@@ -3709,6 +3709,8 @@ function renderTutorial() {
   function buildTutorialCard() {
     let hl = "";
     let cs = "";
+    const isMobile = window.innerWidth < 600;
+
     if (step.targetSelector) {
       const target = document.querySelector(step.targetSelector);
       if (target) {
@@ -3719,16 +3721,26 @@ function renderTutorial() {
         const width = rect.width + pad * 2;
         const height = rect.height + pad * 2;
         hl = `<div class="tutorial-highlight" style="top:${top}px;left:${left}px;width:${width}px;height:${height}px;"></div>`;
-        const cardTop = (top + height + 12 + 160 < window.innerHeight)
-          ? `${top + height + 12}px`
-          : `${Math.max(8, top - 170)}px`;
-        const cardLeft = Math.min(Math.max(8, left), window.innerWidth - 360) + "px";
-        cs = `top:${cardTop};left:${cardLeft};`;
+
+        if (isMobile) {
+          // On mobile: always anchor card to bottom center of screen
+          cs = "bottom:80px;left:50%;transform:translateX(-50%);width:calc(100vw - 24px);max-width:none;";
+        } else {
+          const cardTop = (top + height + 12 + 160 < window.innerHeight)
+            ? `${top + height + 12}px`
+            : `${Math.max(8, top - 170)}px`;
+          const cardLeft = Math.min(Math.max(8, left), window.innerWidth - 360) + "px";
+          cs = `top:${cardTop};left:${cardLeft};`;
+        }
       } else {
-        cs = "top:50%;left:50%;transform:translate(-50%,-50%);";
+        cs = isMobile
+          ? "bottom:80px;left:50%;transform:translateX(-50%);width:calc(100vw - 24px);max-width:none;"
+          : "top:50%;left:50%;transform:translate(-50%,-50%);";
       }
     } else {
-      cs = "top:50%;left:50%;transform:translate(-50%,-50%);";
+      cs = isMobile
+        ? "top:50%;left:50%;transform:translate(-50%,-50%);width:calc(100vw - 24px);max-width:none;"
+        : "top:50%;left:50%;transform:translate(-50%,-50%);";
     }
     overlay.innerHTML = `
       ${hl}
