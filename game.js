@@ -722,7 +722,7 @@ function expandWorldMap() {
   if (currentSize >= maxSize) { log("Map already at maximum size!", "warn"); return; }
 
   const ring = G.mapRing + 1;
-  const cost = { moonstone: ring, pure_knowledge: 2 };
+  const cost = { moonstone: ring * 3, essence: ring * 5 };
   if (!canAfford(cost)) { log("Not enough resources to expand the map!", "warn"); return; }
   spend(cost);
 
@@ -2302,12 +2302,12 @@ function renderWorldMap() {
 
   // Expand button
   const ringCost = G.mapRing + 1;
-  const expandCost = { moonstone: ringCost, pure_knowledge: 2 };
+  const expandCost = { moonstone: ringCost * 3, essence: ringCost * 5 };
   const canExpand = mapSize < 9 && canAfford(expandCost);
   const expandBtn = mapSize < 9
     ? `<button class="btn" data-action="expand-map" style="margin-top:10px;${canExpand ? "color:var(--green);" : "color:var(--text-dim);"}"
         ${canExpand ? "" : "disabled"}>
-        🗺️ Expand Map (${ringCost}🌙 + 2 Pure Knowledge)
+        🗺️ Expand Map (${ringCost * 3}🌙 + ${ringCost * 5}✨)
        </button>`
     : `<p style="text-align:center;color:var(--text-dim);font-size:11px;margin-top:8px;">Map at maximum size (9×9)</p>`;
 
