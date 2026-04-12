@@ -25,7 +25,15 @@
       "Bash(rm /c/Users/rotc_/Documents/Projetos/alch_auto/stagehand.config.js)",
       "Bash(git rm:*)",
       "Bash(cmd /c \"npx playwright test --reporter=line 2>&1\")",
-      "Bash(cmd /c \"cd C:\\\\\\\\Users\\\\\\\\rotc_\\\\\\\\Documents\\\\\\\\Projetos\\\\\\\\alch_auto && npx playwright test --reporter=line\")"
+      "Bash(cmd /c \"cd C:\\\\\\\\Users\\\\\\\\rotc_\\\\\\\\Documents\\\\\\\\Projetos\\\\\\\\alch_auto && npx playwright test --reporter=line\")",
+      "Bash(python3 -c ':*)",
+      "Bash(python -c ':*)",
+      "Bash(python c:/Users/rotc_/Documents/Projetos/alch_auto/.claude/skills/prompt-contracts/scripts/contracts_db.py save --title 'Manager Golem — Auto-Dispatch System' --tags golem,manager,automation,dispatch --project c:/Users/rotc_/Documents/Projetos/alch_auto --contract 'Manager Golem — Auto-Dispatch System:*)",
+      "Bash(python \"c:/Users/rotc_/Documents/Projetos/alch_auto/.claude/skills/prompt-contracts/scripts/contracts_db.py\" save --help)",
+      "Bash(grep -n \"\\\\\\\\\\\\\\\\!\" \"c:/Users/rotc_/Documents/Projetos/alch_auto/.claude/skills/prompt-contracts/scripts/contracts_db.py\")",
+      "Bash(python c:/Users/rotc_/Documents/Projetos/alch_auto/.claude/skills/prompt-contracts/scripts/contracts_db.py save --title 'Manager Golem Auto-Dispatch System' --tags golem,manager,automation --project c:/Users/rotc_/Documents/Projetos/alch_auto --contract 'Manager Golem — Auto-Dispatch System:*)",
+      "Bash(python c:/Users/rotc_/Documents/Projetos/alch_auto/.claude/skills/prompt-contracts/scripts/contracts_db.py save 'Manager Golem Auto-Dispatch System' 'GOAL: Add a Manager Golem type that automatically dispatches idle worker golems to gather resources based on player-configured jobs. Each job targets a material stock level or recipe demand with a per-job golem limit. The Manager always selects the weakest eligible idle golem that meets zone danger requirements.:*)",
+      "Bash(cmd /c \"node --check c:\\\\Users\\\\rotc_\\\\Documents\\\\Projetos\\\\alch_auto\\\\game.js 2>&1\")"
     ],
     "deny": [],
     "ask": []

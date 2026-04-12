@@ -172,6 +172,7 @@ const GOLEM_TYPES = {
   // Tier 4 — needs moonstone + essence
   moon:    { name: "Moon Golem",    tier: 4, ascii: " (^v^) \n {___} \n  | | ", speed: 3,  capacity: 18, danger_resist: 3, cost: { moonstone: 8, essence: 15, gold: 200 },        unlock: 3 },
   // Tier 5 — Intelligent Golems (require Divination research)
+  manager:  { name: "Manager Golem",  tier: 5, ascii: " (•_•) \n [MGR] \n  | | ", speed: 0, capacity: 0,  danger_resist: 0, cost: { soul_crystal: 1, condensed_knowledge_divination: 2, divination_shard: 5 }, unlock: 3, role: "manager" },
   feeder:   { name: "Feeder Golem",   tier: 5, ascii: " (^_^) \n [   ] \n  | | ", speed: 5, capacity: 10, danger_resist: 0, cost: { divination_shard: 2, clay: 5, essence: 8 },        unlock: 0, role: "feeder"   },
   carrier:  { name: "Carrier Golem",  tier: 5, ascii: " (~_~) \n [___] \n  | | ", speed: 5, capacity: 20, danger_resist: 1, cost: { divination_shard: 2, iron: 4, crystals: 6 },       unlock: 1, role: "carrier"  },
   // Tier 5 — Explorer Golems (require Expedition Mastery research)
@@ -480,6 +481,10 @@ const G = {
   // Tutorial State
   tutorialStep: -1,   // -1 = inactive, 0+ = current step index
   tutorialSeen: false, // true after first completion/skip
+
+  // Manager Golem State
+  managerJobs: [],              // Array of { id, type, target, targetAmount, limit, managerId }
+  managerGolemsEnabled: false,  // true once a Manager Golem has been crafted
 
   // Debug Mode (session-only, does not persist)
   debugMode: false              // Toggle with F2 key
@@ -1709,9 +1714,10 @@ function craftGolem(typeId) {
   if (G.workshopLevel < def.unlock) { log(`Workshop level ${def.unlock} required!`, "warn"); return; }
   if ((def.role === "feeder" || def.role === "carrier") && !G.intelligentGolemsUnlocked) { log("Divination research required to craft intelligent golems.", "warn"); return; }
   if (def.role === "explorer" && !G.explorerGolemsUnlocked) { log("Expedition Mastery research required to craft Explorer Golems.", "warn"); return; }
+  if (def.role === "manager" && !G.intelligentGolemsUnlocked) { log("Divination research required to craft Manager Golems.", "warn"); return; }
   const maxGolems = WORKSHOP_LEVELS[G.workshopLevel].maxGolems;
-  const regularGolemCount = G.golems.filter(g => !GOLEM_TYPES[g.typeId]?.role).length;
-  if (!def.role && regularGolemCount >= maxGolems) { log("Golem dock is full! Upgrade workshop.", "warn"); return; }
+  const countedGolemCount = G.golems.filter(g => { const r = GOLEM_TYPES[g.typeId]?.role; return !r || r === "manager"; }).length;
+  if ((!def.role || def.role === "manager") && countedGolemCount >= maxGolems) { log("Golem dock is full! Upgrade workshop.", "warn"); return; }
   if (!canAfford(def.cost, G.craftCostMult)) { log(`Not enough resources to craft ${def.name}.`, "warn"); return; }
   spend(def.cost, G.craftCostMult);
   const golem = {
@@ -1725,7 +1731,8 @@ function craftGolem(typeId) {
     alembicSlot: null,     // specific slot assigned to: resourceId string (input) or 'output', or null
     trackedResources: [],        // for explorer: up to 2 resourceIds to track [slot0, slot1]
     dispatchedByExplorerId: null, // for regular golems dispatched by an explorer
-    dispatchedForSlot: null       // which explorer slot (0 or 1) dispatched this golem
+    dispatchedForSlot: null,      // which explorer slot (0 or 1) dispatched this golem
+    managedByJobId: null          // for worker golems dispatched by a manager job
   };
   G.golems.push(golem);
   log(`✨ Crafted ${golem.name}!`, "great");
@@ -1734,6 +1741,7 @@ function craftGolem(typeId) {
   renderRecipes();
   renderResources();
   renderFooter();
+  renderManagerBtn();
   saveGame();
 }
 
@@ -1743,7 +1751,7 @@ function assignGolemToZone(golemId, zoneId) {
   if (!golem || !zone) return;
   if (golem.state !== "idle") { log(`${golem.name} is busy!`, "warn"); return; }
   const def = GOLEM_TYPES[golem.typeId];
-  if (def.role === "feeder" || def.role === "carrier" || def.role === "explorer") { log(`${golem.name} cannot be sent to zones directly.`, "warn"); return; }
+  if (def.role === "feeder" || def.role === "carrier" || def.role === "explorer" || def.role === "manager") { log(`${golem.name} cannot be sent to zones directly.`, "warn"); return; }
   if (zone.danger > golem.danger_resist) { log(`⚠️ ${golem.name} cannot handle ${zone.name}! Needs Danger Resist ${zone.danger} (has ${golem.danger_resist}). Upgrade it first!`, "warn"); return; }
   if (golemsInZone(zoneId).length >= zone.maxSlots) { log(`${zone.name} is full! (${zone.maxSlots} slots)`, "warn"); return; }
   const speed = def.speed * G.golemSpeedMult * (golem.speed_mult || 1.0);
@@ -3605,7 +3613,7 @@ function renderFooter() {
   if (el) {
     const wl = WORKSHOP_LEVELS[G.workshopLevel];
     const busy = G.golems.filter(g => g.state !== "idle").length;
-    const regularCount = G.golems.filter(g => !GOLEM_TYPES[g.typeId]?.role).length;
+    const regularCount = G.golems.filter(g => { const r = GOLEM_TYPES[g.typeId]?.role; return !r || r === "manager"; }).length;
     let text = `Workshop: ${wl.name} (Lvl ${G.workshopLevel}) | Golems: ${regularCount}/${wl.maxGolems} (${busy} active) | Time: ${fmtTime(G.totalTime)}`;
     if (G.activeShrineBuffs.length > 0) {
       const remaining = Math.max(0, Math.ceil((G.activeShrineBuffs[0].endTime - Date.now()) / 1000));
@@ -3788,6 +3796,7 @@ function renderAll() {
   renderAlchemistActions();
   renderAlembicsBtn();
   renderExpeditionBtn();
+  renderManagerBtn();
 }
 
 // ─────────────────────────────────────────────────────
@@ -3916,6 +3925,7 @@ function saveGame() {
       bossRespawnQueue: G.bossRespawnQueue,
       tutorialStep: G.tutorialStep,
       tutorialSeen: G.tutorialSeen,
+      managerJobs: G.managerJobs,
       savedAt: Date.now(),
     }));
   } catch(e) {}
@@ -3939,7 +3949,8 @@ function loadGame() {
       alembicSlot: g.alembicSlot || null,
       trackedResources: g.trackedResources || [],
       dispatchedByExplorerId: g.dispatchedByExplorerId || null,
-      dispatchedForSlot: g.dispatchedForSlot !== undefined ? g.dispatchedForSlot : null
+      dispatchedForSlot: g.dispatchedForSlot !== undefined ? g.dispatchedForSlot : null,
+      managedByJobId: g.managedByJobId || null
     }));
     G.nextGolemId      = save.nextGolemId||1;
     G.workshopLevel    = save.workshopLevel||0;
@@ -4024,6 +4035,7 @@ function loadGame() {
     if (G.resources.artifact === undefined) G.resources.artifact = 0;
     G.tutorialStep = save.tutorialStep !== undefined ? save.tutorialStep : -1;
     G.tutorialSeen = save.tutorialSeen || false;
+    G.managerJobs = save.managerJobs || [];
 
     // Handle in-progress distillation (complete if finished during offline)
     if (G.distiller && G.distiller.currentProcessing) {
@@ -4195,6 +4207,268 @@ function loadGame() {
 }
 
 // ─────────────────────────────────────────────────────
+// MANAGER GOLEM SYSTEM
+// ─────────────────────────────────────────────────────
+
+let _managerLastTick = 0;
+
+function tickManager(now) {
+  if (now - _managerLastTick < 2000) return;
+  _managerLastTick = now;
+
+  if (!G.managerJobs.length) return;
+
+  G.managerJobs.forEach(job => {
+    if (!job.managerId) return;
+
+    // Manager golem must exist and be idle (still in roster)
+    const manager = G.golems.find(g => g.id === job.managerId);
+    if (!manager || GOLEM_TYPES[manager.typeId]?.role !== "manager") return;
+
+    // Check if target is already met
+    if (job.type === "material") {
+      if ((G.resources[job.target] || 0) >= job.targetAmount) return;
+    } else if (job.type === "recipe") {
+      const recipe = ALCHEMY_RECIPES.find(r => r.id === job.target);
+      if (!recipe) return;
+      const allMet = Object.entries(recipe.ingredients).every(
+        ([res, amt]) => (G.resources[res] || 0) >= amt
+      );
+      if (allMet) return;
+    }
+
+    // Count golems currently dispatched by this job (non-idle)
+    const dispatched = G.golems.filter(
+      g => g.managedByJobId === job.id && g.state !== "idle"
+    ).length;
+    if (dispatched >= job.limit) return;
+
+    // Determine which zone to send to
+    let targetZoneId = null;
+    if (job.type === "material") {
+      const eligible = ZONES.filter(z =>
+        z.yields.includes(job.target) && golemsInZone(z.id).length < z.maxSlots
+      );
+      if (!eligible.length) return;
+      targetZoneId = eligible[0].id;
+    } else if (job.type === "recipe") {
+      const recipe = ALCHEMY_RECIPES.find(r => r.id === job.target);
+      if (!recipe) return;
+      // Find the ingredient with the lowest stock ratio
+      let worstResource = null, worstRatio = Infinity;
+      Object.entries(recipe.ingredients).forEach(([res, amt]) => {
+        const ratio = (G.resources[res] || 0) / amt;
+        if (ratio < worstRatio) { worstRatio = ratio; worstResource = res; }
+      });
+      if (!worstResource) return;
+      const eligible = ZONES.filter(z =>
+        z.yields.includes(worstResource) && golemsInZone(z.id).length < z.maxSlots
+      );
+      if (!eligible.length) return;
+      targetZoneId = eligible[0].id;
+    }
+
+    if (!targetZoneId) return;
+    const zone = ZONES.find(z => z.id === targetZoneId);
+
+    // Find the weakest eligible idle worker golem (lowest tier, then lowest id)
+    const worker = G.golems
+      .filter(g => {
+        const gDef = GOLEM_TYPES[g.typeId];
+        return g.state === "idle" && !gDef?.role && g.danger_resist >= zone.danger;
+      })
+      .sort((a, b) => {
+        const ta = GOLEM_TYPES[a.typeId]?.tier || 1;
+        const tb = GOLEM_TYPES[b.typeId]?.tier || 1;
+        return ta !== tb ? ta - tb : a.id - b.id;
+      })[0];
+
+    if (!worker) return;
+
+    worker.managedByJobId = job.id;
+    assignGolemToZone(worker.id, targetZoneId);
+  });
+}
+
+function addManagerJob(type, target, targetAmount, limit, managerId) {
+  const id = "job_" + Date.now();
+  G.managerJobs.push({ id, type, target, targetAmount: Number(targetAmount), limit: Number(limit), managerId: managerId ? Number(managerId) : null });
+  log(`📋 Manager job added: ${type === "material" ? target : target} (limit: ${limit})`, "good");
+  renderManager();
+  saveGame();
+}
+
+function removeManagerJob(jobId) {
+  G.golems.forEach(g => { if (g.managedByJobId === jobId) g.managedByJobId = null; });
+  G.managerJobs = G.managerJobs.filter(j => j.id !== jobId);
+  log(`📋 Manager job removed.`, "info");
+  renderManager();
+  saveGame();
+}
+
+function assignManagerToJob(jobId, managerId) {
+  const job = G.managerJobs.find(j => j.id === jobId);
+  if (!job) return;
+  job.managerId = managerId ? Number(managerId) : null;
+  renderManager();
+  saveGame();
+}
+
+function showManagerPanel() {
+  G.currentView = "manager";
+  document.getElementById("main-layout").style.display = "none";
+  document.getElementById("worldmap-panel").style.display = "none";
+  document.getElementById("researchlab-panel").style.display = "none";
+  document.getElementById("alembic-panel").style.display = "none";
+  document.getElementById("expedition-panel").style.display = "none";
+  const panel = document.getElementById("manager-panel");
+  panel.style.display = "block";
+  renderManager();
+}
+
+function hideManagerPanel() {
+  G.currentView = "workshop";
+  document.getElementById("manager-panel").style.display = "none";
+  document.getElementById("main-layout").style.display = "grid";
+}
+
+function renderManagerBtn() {
+  const btn = document.getElementById("manager-btn");
+  if (btn) {
+    const hasManager = G.golems.some(g => GOLEM_TYPES[g.typeId]?.role === "manager");
+    btn.style.display = hasManager ? "block" : "none";
+  }
+}
+
+function renderManager() {
+  const panel = document.getElementById("manager-panel");
+  if (!panel || G.currentView !== "manager") return;
+
+  const managerGolems = G.golems.filter(g => GOLEM_TYPES[g.typeId]?.role === "manager");
+  const gatherableResources = [...new Set(ZONES.flatMap(z => z.yields))];
+  const unlockedRecipes = ALCHEMY_RECIPES.filter(r => r.unlocked &&
+    Object.keys(r.ingredients).some(res => gatherableResources.includes(res)));
+
+  const managerOptions = [
+    `<option value="">-- None --</option>`,
+    ...managerGolems.map(g => `<option value="${g.id}">${g.name}</option>`)
+  ].join("");
+
+  const jobRows = G.managerJobs.map(job => {
+    const dispatched = G.golems.filter(g => g.managedByJobId === job.id && g.state !== "idle").length;
+    const targetMet = job.type === "material"
+      ? (G.resources[job.target] || 0) >= job.targetAmount
+      : (() => {
+          const rec = ALCHEMY_RECIPES.find(r => r.id === job.target);
+          return rec && Object.entries(rec.ingredients).every(([r,a]) => (G.resources[r]||0) >= a);
+        })();
+    const status = !job.managerId ? '<span style="color:var(--text-dim)">[no manager]</span>'
+      : targetMet ? '<span style="color:var(--green)">[target met]</span>'
+      : `<span style="color:var(--amber)">[dispatched: ${dispatched}/${job.limit}]</span>`;
+    const label = job.type === "material"
+      ? `${RESOURCES[job.target]?.icon || "?"} ${RESOURCES[job.target]?.name || job.target} ≥ ${job.targetAmount}`
+      : `${ALCHEMY_RECIPES.find(r=>r.id===job.target)?.icon||"?"} ${ALCHEMY_RECIPES.find(r=>r.id===job.target)?.name||job.target} (ingredients)`;
+    const curMgr = job.managerId || "";
+    return `
+      <div class="manager-job-card">
+        <div class="manager-job-info">
+          <span class="manager-job-label">${label}</span>
+          <span class="manager-job-limit">max ${job.limit} golem(s)</span>
+          ${status}
+        </div>
+        <div class="manager-job-controls">
+          <label style="font-size:11px;color:var(--text-dim)">Manager:</label>
+          <select data-action="assign-manager-golem" data-job="${job.id}" style="font-family:monospace;background:var(--bg2);color:var(--text);border:1px solid var(--border);font-size:11px;">
+            ${managerOptions.replace(`value="${curMgr}"`, `value="${curMgr}" selected`)}
+          </select>
+          <button class="btn btn-sm" data-action="remove-manager-job" data-job="${job.id}" style="color:var(--red);margin-left:4px;">✕ Remove</button>
+        </div>
+      </div>`;
+  }).join("") || `<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">No jobs configured. Add one below.</div>`;
+
+  const resOptions = gatherableResources.map(r =>
+    `<option value="${r}">${RESOURCES[r]?.icon||"?"} ${RESOURCES[r]?.name||r}</option>`
+  ).join("");
+  const recOptions = unlockedRecipes.map(r =>
+    `<option value="${r.id}">${r.icon} ${r.name}</option>`
+  ).join("");
+
+  panel.innerHTML = `
+    <div class="manager-panel-inner">
+      <div class="manager-header">
+        <h2 style="color:var(--amber);margin:0;">🧠 Golem Manager</h2>
+        <button class="btn" data-action="hide-manager" style="color:var(--text-dim);">✕ Close</button>
+      </div>
+
+      <div class="manager-section">
+        <h3 style="color:var(--green);font-size:13px;margin:0 0 6px;">Manager Golems (${managerGolems.length})</h3>
+        ${managerGolems.length
+          ? managerGolems.map(g => `<div style="font-size:12px;color:var(--text-dim);padding:2px 0;">• ${g.name} — idle (directing)</div>`).join("")
+          : `<div style="font-size:12px;color:var(--text-dim);">No Manager Golems in roster. Craft one to begin.</div>`}
+      </div>
+
+      <div class="manager-section">
+        <h3 style="color:var(--green);font-size:13px;margin:0 0 6px;">Active Jobs</h3>
+        ${jobRows}
+      </div>
+
+      <div class="manager-section">
+        <h3 style="color:var(--amber);font-size:13px;margin:0 0 8px;">Add Job</h3>
+        <div class="manager-add-form" id="manager-add-form">
+          <div style="margin-bottom:6px;">
+            <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px;">Job Type</label>
+            <select id="mgr-job-type" data-action="switch-manager-job-type" style="font-family:monospace;background:var(--bg2);color:var(--text);border:1px solid var(--border);width:100%;font-size:12px;padding:3px;">
+              <option value="material">Material — keep stock ≥ target</option>
+              <option value="recipe">Recipe — keep ingredients for brew</option>
+            </select>
+          </div>
+          <div style="margin-bottom:6px;" id="mgr-target-row">
+            <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px;">Resource</label>
+            <select id="mgr-target" style="font-family:monospace;background:var(--bg2);color:var(--text);border:1px solid var(--border);width:100%;font-size:12px;padding:3px;">${resOptions}</select>
+          </div>
+          <div style="margin-bottom:6px;" id="mgr-amount-row">
+            <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px;">Keep at least</label>
+            <input id="mgr-amount" type="number" min="1" value="20" style="font-family:monospace;background:var(--bg2);color:var(--text);border:1px solid var(--border);width:60px;padding:3px;font-size:12px;" />
+          </div>
+          <div style="margin-bottom:6px;">
+            <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px;">Max golems to dispatch</label>
+            <input id="mgr-limit" type="number" min="1" max="10" value="2" style="font-family:monospace;background:var(--bg2);color:var(--text);border:1px solid var(--border);width:60px;padding:3px;font-size:12px;" />
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px;">Assign Manager Golem</label>
+            <select id="mgr-manager" style="font-family:monospace;background:var(--bg2);color:var(--text);border:1px solid var(--border);width:100%;font-size:12px;padding:3px;">${managerOptions}</select>
+          </div>
+          <button class="btn" data-action="add-manager-job" style="color:var(--green);width:100%;">+ Add Job</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderManagerFormTarget() {
+  const type = document.getElementById("mgr-job-type")?.value;
+  const targetRow = document.getElementById("mgr-target-row");
+  const amountRow = document.getElementById("mgr-amount-row");
+  const targetSel = document.getElementById("mgr-target");
+  if (!targetRow || !targetSel) return;
+
+  const gatherableResources = [...new Set(ZONES.flatMap(z => z.yields))];
+  const unlockedRecipes = ALCHEMY_RECIPES.filter(r => r.unlocked &&
+    Object.keys(r.ingredients).some(res => gatherableResources.includes(res)));
+
+  if (type === "material") {
+    targetRow.querySelector("label").textContent = "Resource";
+    targetSel.innerHTML = gatherableResources.map(r =>
+      `<option value="${r}">${RESOURCES[r]?.icon||"?"} ${RESOURCES[r]?.name||r}</option>`).join("");
+    amountRow.style.display = "";
+  } else {
+    targetRow.querySelector("label").textContent = "Recipe";
+    targetSel.innerHTML = unlockedRecipes.map(r =>
+      `<option value="${r.id}">${r.icon} ${r.name}</option>`).join("");
+    amountRow.style.display = "none";
+  }
+}
+
+// ─────────────────────────────────────────────────────
 // MAIN GAME LOOP
 // ─────────────────────────────────────────────────────
 
@@ -4214,6 +4488,7 @@ function gameLoop() {
   tickDistiller(now);
   tickResearch(now);
   tickAlembics(now);
+  tickManager(now);
   tickProgressBars(now);
   if (G.currentView === "expeditions") renderExpeditionPanel();
 
@@ -4240,6 +4515,10 @@ function setupEventDelegation() {
       assignGolemToRecipe(Number(el.dataset.golem), el.value);
     } else if (el.dataset.action === 'set-explorer-resource') {
       setExplorerResource(Number(el.dataset.explorer), Number(el.dataset.slot), el.value);
+    } else if (el.dataset.action === 'assign-manager-golem') {
+      assignManagerToJob(el.dataset.job, el.value);
+    } else if (el.dataset.action === 'switch-manager-job-type') {
+      renderManagerFormTarget();
     }
   });
 
@@ -4314,6 +4593,19 @@ function setupEventDelegation() {
       unassignCollectorFromOutput(btn.dataset.recipe);
     } else if (action === 'free-all-feeders') {
       freeAllFeeders();
+
+    // Manager Actions
+    } else if (action === 'show-manager')       { showManagerPanel();
+    } else if (action === 'hide-manager')       { hideManagerPanel();
+    } else if (action === 'add-manager-job') {
+      const type      = document.getElementById("mgr-job-type")?.value || "material";
+      const target    = document.getElementById("mgr-target")?.value;
+      const amount    = document.getElementById("mgr-amount")?.value || 20;
+      const limit     = document.getElementById("mgr-limit")?.value || 2;
+      const managerId = document.getElementById("mgr-manager")?.value;
+      if (!target) { log("Select a resource or recipe target.", "warn"); return; }
+      addManagerJob(type, target, amount, limit, managerId);
+    } else if (action === 'remove-manager-job') { removeManagerJob(btn.dataset.job);
 
     // Tutorial Actions
     } else if (action === 'start-tutorial') { startTutorial();

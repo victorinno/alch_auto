@@ -1,493 +1,263 @@
+---
+name: prompt-contracts
+description: "Interactive system-building assistant using the Prompt Contracts framework. Transforms vague vibe prompts into precise, structured contracts with four enforceable clauses: GOAL, CONSTRAINTS, FORMAT, and FAILURE CONDITIONS. This skill should be used when the user wants to build a system, feature, or component and wants to avoid wasted iterations. Trigger on /prompt-contracts, help me write a contract, lets build a system, or when the user asks for help structuring a request."
+---
+
 # Prompt Contracts Skill
 
-> Transform vibe coding into structured, shippable software with the Prompt Contracts framework.
+An interactive assistant for building precise AI-executable specifications. Stop vibe coding. Start shipping.
 
 ## What This Skill Does
 
-This skill implements the **Prompt Contracts** methodology for Claude Code - a structured approach that replaces vague prompts with enforceable specifications. Instead of "gambling" with natural language prompts, you'll create contracts with clear goals, constraints, formats, and failure conditions.
+Guide the user through creating a **Prompt Contract** — a structured prompt with four enforceable clauses that eliminates ambiguity and prevents Claude from solving the wrong problem.
 
-**Key Benefits:**
-- Reduce undo/revert rate from 1-in-3 to 1-in-10
-- Cut prompt-to-usable-code cycles from 3 rounds to 1-2 rounds
-- Eliminate stack violations (wrong libraries, wrong patterns)
-- Ship code you understand and can maintain
+The framework: **GOAL** (testable success metric) + **CONSTRAINTS** (hard boundaries) + **FORMAT** (exact output structure) + **FAILURE CONDITIONS** (what makes it unacceptable).
 
-## The Four Components of a Prompt Contract
+Reference `references/framework.md` for the full framework details, examples, and clarifying questions by domain.
 
-### 1. GOAL — Define What "Done" Looks Like
+---
 
-**Before (vibe):**
+## History Storage
+
+All saved contracts live in `~/.claude/prompt-contracts/history/` as individual JSON files. Use `scripts/contracts_db.py` for all read/write operations. Never write directly to the history directory.
+
+Each contract record contains:
+- `id` — UUID v4
+- `title` — short human-readable label
+- `created_at` — ISO 8601 UTC timestamp
+- `project` — absolute path of the working directory at save time
+- `parent_id` — UUID of the contract this revises (null for originals)
+- `tags` — optional string list
+- `contract` — full contract text
+
+---
+
+## Complexity Detection & Auto-Decomposition
+
+Before building any contract in `new` or `review` mode, run a complexity check on the goal. If the goal is complex, automatically switch to sequence mode and decompose it — do not ask the user whether to decompose. Just do it and explain why.
+
+### Complexity Signals (trigger decomposition if 2+ are true)
+
+- Goal touches more than one architectural layer (e.g. DB + API + UI, or service + tests + infra)
+- Goal mentions multiple distinct domains (e.g. auth + billing + notifications)
+- Goal implies more than 3 output files in FORMAT
+- Goal contains connective language: "and also", "as well as", "plus", "including", "then", "after that", "on top of that"
+- Goal describes multiple distinct user journeys or success paths
+- Estimated implementation is >200 LOC or >4 hours of work
+- Goal includes cross-cutting concerns (logging, auth, validation) alongside feature work
+
+### Decomposition Algorithm
+
+When complexity is detected:
+
+1. **Announce the decision** — one sentence: "This goal spans multiple concerns — I'll break it into a linked sequence of contracts." Do not ask for permission.
+
+2. **Identify natural seams** using SE principles (see `references/framework.md` for the full decomposition guide).
+
+3. **Show the proposed breakdown** as a numbered list before building anything.
+
+4. **Create the sequence** once confirmed.
+
+5. **Build each contract** using the standard interactive flow.
+
+6. **Save each step** with sequence link.
+
+7. **After all steps**, show the full sequence summary via `seq-show` and offer to execute.
+
+---
+
+## Modes
+
+### `/prompt-contracts` or `/prompt-contracts new` — Build a New Contract
+
+1. Ask: "What are you building, and what does success look like when it's done?"
+2. Run complexity check — if 2+ signals, auto-decompose.
+3. Identify domain, load clarifying questions from `references/framework.md`.
+4. Ask targeted follow-ups (stack, success verification, failure modes).
+5. Check for CLAUDE.md — use its constraints as baseline.
+6. Generate contract as clean, copyable code block.
+7. Save automatically via `contracts_db.py save`.
+8. Offer to refine one section at a time.
+
+**Tone**: Conversational. One question at a time.
+
+---
+
+### `/prompt-contracts review` — Convert a Vibe Prompt to a Contract
+
+1. Ask the user to paste their existing prompt.
+2. Run complexity check — if 2+ signals, auto-decompose.
+3. Identify what's underspecified (no success metric, no stack, no output structure, no failure guardrails).
+4. Ask minimum questions to fill gaps.
+5. Output upgraded contract + brief diff summary.
+6. Save automatically.
+
+---
+
+### `/prompt-contracts claude-md` — Create, Update, or Refine CLAUDE.md
+
+**Path A — CLAUDE.md exists:** Diagnostic + refinement mode. Identify vague rules, missing stack entries, missing failure guardrails. Scan codebase for drift. Show before/after diff before writing.
+
+**Path B — No CLAUDE.md:** Infer from package files, directory structure, code style. Confirm with user before writing.
+
+Both paths: include session handshake ritual at top. Always confirm before writing. Never silently overwrite.
+
+---
+
+### `/prompt-contracts sequence <title>` — Start a Multi-Step Feature Sequence
+
+1. Create sequence via `contracts_db.py seq-create`.
+2. Ask user to identify logical steps (DB → API → UI → tests).
+3. Show proposed breakdown, confirm before proceeding.
+4. Build contracts step by step, save each with sequence link.
+5. Show full summary via `seq-show`.
+6. Offer to execute.
+
+---
+
+### `/prompt-contracts sequence next <seq_id>` — Continue a Sequence
+
+Run `seq-next`, show last contract, build next step interactively.
+
+---
+
+### `/prompt-contracts sequences` — List All Sequences
+
+Run `contracts_db.py seq-list`.
+
+---
+
+### `/prompt-contracts sequence show <seq_id>` — Show a Sequence
+
+Run `contracts_db.py seq-show <seq_id>`.
+
+---
+
+### `/prompt-contracts sequence run <seq_id>` — Execute a Sequence
+
+Load summary, run `contracts_db.py seq-execute <seq_id>`. Executor handles all output.
+
+---
+
+### `/prompt-contracts history` — Browse Contract History
+
+Run `contracts_db.py list --limit 20`.
+
+---
+
+### `/prompt-contracts show <uuid>` — Show a Saved Contract
+
+Run `contracts_db.py show <uuid>`. Offer to revise.
+
+---
+
+### `/prompt-contracts revise <uuid>` — Revise an Existing Contract
+
+Load, ask what to change, generate updated contract, save with `--parent <original_uuid>`.
+
+---
+
+### `/prompt-contracts diff <uuid1> <uuid2>` — Compare Two Contracts
+
+Run `contracts_db.py diff <uuid1> <uuid2>`. Summarize key changes in plain English.
+
+---
+
+### `/prompt-contracts search <query>` — Search Contracts
+
+Run `contracts_db.py search "<query>"`.
+
+---
+
+### `/prompt-contracts revisions <uuid>` — Show Revision Chain
+
+Run `contracts_db.py revisions <uuid>`. Current contract marked with `*`.
+
+---
+
+### `/prompt-contracts superpowers` — Phase-Gated Workflow
+
+Load `references/superpowers.md` first. Run Step 0 installation check. Follow phase protocol exactly: Brainstorm → Spec → Plan → Execute. Each phase requires explicit user sign-off before advancing.
+
 ```
-Add a subscription system to the app
+Phase 1 → GOAL clause (draft) — gate: user approves success metric
+Phase 2 → Full contract       — gate: user signs off, saved to history
+Phase 3 → Task list           — gate: user confirms breakdown
+Phase 4 → Implemented tasks   — gate: each task passes clause review
 ```
 
-**After (contract):**
+---
+
+### `/prompt-contracts tutorial` — Interactive Walkthrough
+
+Load `references/tutorial-curriculum.md` first. Two modes: interactive (4 concepts, one at a time) or `--export` (generates `prompt-contracts-guide.md`).
+
+---
+
+### `/prompt-contracts help` — Show Available Commands
+
 ```
-GOAL: Implement Stripe subscription management where users can
-subscribe to 3 tiers (free/pro/team), upgrade/downgrade instantly,
-and see billing status on /settings/billing.
-Success = a free user can subscribe to Pro,
-see the charge on Stripe dashboard, and access
-gated features within 5 seconds.
+Prompt Contracts — available commands:
+
+Contract building:
+  /prompt-contracts              → Build a new contract interactively
+  /prompt-contracts new          → Same as above
+  /prompt-contracts review       → Convert a vague prompt into a contract
+  /prompt-contracts claude-md    → Create, update, or refine CLAUDE.md
+  /prompt-contracts superpowers  → Phase-gated workflow: brainstorm → spec → plan → execute
+  /prompt-contracts tutorial     → Guided walkthrough of the prompt contracts framework
+
+Sequences (multi-step features):
+  /prompt-contracts sequence <title>       → Start a new multi-step sequence
+  /prompt-contracts sequence next <seq_id> → Add the next step to a sequence
+  /prompt-contracts sequence show <seq_id> → Show all steps in a sequence
+  /prompt-contracts sequence run <seq_id>  → Execute a sequence (parallel where possible)
+  /prompt-contracts sequences              → List all sequences
+
+History:
+  /prompt-contracts history               → List saved contracts
+  /prompt-contracts show <uuid>           → Show a saved contract
+  /prompt-contracts revise <uuid>         → Revise a contract (saves as new revision)
+  /prompt-contracts diff <u1> <u2>        → Diff two contracts
+  /prompt-contracts search <q>            → Search contract text
+  /prompt-contracts revisions <uuid>      → Show revision chain
+
+  /prompt-contracts help                  → Show this help
 ```
 
-**Rules:**
-- Make it **testable** - you should verify in under 1 minute
-- Define **exact success metrics**
-- No ambiguity - avoid "it kind of works"
+---
 
-### 2. CONSTRAINTS — The Walls That Save You
+## Output Format
 
-**Always include:**
-- Stack requirements (frameworks, libraries, tools)
-- Hard boundaries that cannot be crossed
-- Forbidden actions
+Always output the final contract as a **fenced code block**:
 
-**Pro Tip:** Maintain a `CLAUDE.md` file at your project root. Every session starts with:
 ```
-Read CLAUDE.md and confirm you understand the project constraints
-before doing anything.
-```
+[Brief task title]
 
-This forces a "handshake" - Claude echoes back constraints, you agree on reality, then work begins.
+GOAL: [Exact, testable success metric]
+Success = [specific observable outcome]
 
-### 3. FORMAT — Specify the Exact Structure
+CONSTRAINTS:
+- [Constraint 1]
+- [Constraint 2]
 
-**Before:**
-```
-Create an API endpoint for user onboarding
-```
-*Results in: 800-line god-function with inline validation, no types*
-
-**After:**
-```
 FORMAT:
-1. Convex function in convex/users.ts (mutation, not action)
-2. Zod schema for input validation in convex/schemas/onboarding.ts
-3. TypeScript types exported from convex/types/user.ts
-4. Include JSDoc on the public function
-5. Return { success: boolean, userId: string, error?: string }
-```
-
-**Benefits:**
-- Modular, typed, documented code every time
-- No 1,200-line components
-- Optimizes for maintainability, not speed
-
-### 4. FAILURE CONDITIONS — The Secret Weapon
-
-Define what **breaks** the contract. This gives Claude a negative target.
-
-**Example:**
-```
-FAILURE CONDITIONS:
-- Uses useState for data that should be in Convex
-- Any component exceeds 150 lines
-- Fetches data client-side when it could be server-side
-- Uses any UI library besides Tailwind utility classes
-- Missing loading and error states
-- Missing TypeScript types on any function parameter
-```
-
-**Why it works:** Claude doesn't have to guess what "good" means when you've told it what "bad" looks like.
-
----
-
-## How to Use This Skill
-
-When you invoke this skill, I will:
-
-1. **Check for CLAUDE.md** - If missing, I'll help you create one with your stack constraints
-2. **Analyze your request** - Understand what you're trying to build
-3. **Draft a Prompt Contract** - Create a structured contract with all 4 components
-4. **Review with you** - Present the contract for your approval
-5. **Execute** - Build according to the contract specifications
-6. **Verify** - Test against the defined success criteria
-
-## Example Session Flow
-
-**You:** "I need a user dashboard that shows active projects"
-
-**I respond with a Prompt Contract:**
-```
-GOAL: Display user's active projects with real-time updates.
-First meaningful paint under 1 second. User can create, archive,
-and rename projects inline.
-
-CONSTRAINTS: Convex useQuery for data, no polling, no SWR.
-Clerk useUser() for auth check. Redirect to /sign-in if
-unauthenticated. Max 150 lines per component file.
-
-FORMAT: Page component in app/dashboard/page.tsx (server component
-wrapper), client component in components/dashboard/ProjectList.tsx,
-Convex query in convex/projects.ts. Tailwind only.
+1. [File/function with path and type]
+2. [File/function with path and type]
 
 FAILURE CONDITIONS:
-- Uses useState for data that should be in Convex
-- Any component exceeds 150 lines
-- Fetches data client-side when it could be server-side
-- Uses any UI library besides Tailwind utility classes
-- Missing loading and error states
-- Missing TypeScript types on any function parameter
-```
-
-**You approve, I build it.**
-
----
-
-## CLAUDE.md Template
-
-I'll help you create a CLAUDE.md file if you don't have one. Here's the recommended structure:
-
-```markdown
-# CLAUDE.md — Project Constraints (always active)
-
-## Stack (non-negotiable)
-- Frontend: [Your framework]
-- Backend: [Your backend]
-- Auth: [Your auth provider]
-- Styling: [Your styling solution]
-- Database: [Your database]
-
-## Hard Rules
-- Never install a new dependency without asking first
-- Never modify the database schema without showing migration plan
-- All API calls go through [your API layer]
-- Environment variables go in .env.local, never hardcoded
-- [Add your project-specific rules]
-
-## Patterns
-- [Your architectural patterns]
-- [Your code organization rules]
-- [Your testing requirements]
-- [Your error handling standards]
-
-## Failure Conditions (Global)
-- No inline styles (use [your styling system])
-- No magic numbers (use constants)
-- No console.logs in production code
-- All functions must have TypeScript types
-- All user inputs must be validated
+- [Antipattern to avoid]
+- [Missing state/type/validation]
+- [Wrong library/pattern]
 ```
 
 ---
 
-## When to Use This Skill
-
-✅ **Use when:**
-- Building new features
-- Refactoring existing code
-- Integrating new systems
-- You need reliable, predictable output
-- You're tired of undoing Claude's creative interpretations
-
-❌ **Don't use when:**
-- Quick one-line fixes
-- Exploratory research questions
-- You genuinely want creative brainstorming
-
----
-
-## Results You Can Expect
-
-Based on 3 weeks of tracked data:
-
-- **Undo/revert rate:** From 33% → 10%
-- **Rounds of iteration:** From 3 → 1.2 average
-- **Stack violations:** From multiple per day → essentially zero
-- **Time investment:** 60 seconds to write contract
-- **Time saved:** 45 minutes of debugging per contract
-
----
-
-## Quick Start Guide
-
-**Step 1:** Create CLAUDE.md in your project root
-```
-> Help me create a CLAUDE.md for my project. I'm using [your stack].
-```
-
-**Step 2:** For your next task, structure it as a Prompt Contract
-```
-> Build [feature] using Prompt Contract methodology
-```
-
-**Step 3:** I'll draft the contract with GOAL, CONSTRAINTS, FORMAT, and FAILURE CONDITIONS
-
-**Step 4:** You approve, I execute
-
----
-
-## Advanced: Security Review Integration
-
-Before pushing code, run a security scan:
-
-```
-> Run /security-review on pending changes
-```
-
-I'll scan for:
-- SQL injection vulnerabilities
-- Auth bypasses
-- Hardcoded secrets
-- XSS vulnerabilities
-- Insecure patterns
-
-Prompt Contracts build the right thing. Security review ensures the right thing doesn't have holes.
-
----
-
-## Philosophy
-
-**The problem was never Claude's intelligence.**
-
-The problem is vibe prompts like:
-- "Make it responsive"
-- "Add error handling"
-- "Use best practices"
-
-These aren't instructions. They're horoscopes.
-
-**Claude Code isn't a fortune teller — it's a contractor.**
-
-You wouldn't hand a contractor a napkin that says "build house, make nice" and expect your dream home. Same applies here.
-
-**Prompt Contracts:**
-- Think for 60 seconds
-- So Claude doesn't guess for 60 minutes
-- From gambling → shipping
-
----
-
-## Iterative Workflow - How This Skill Works
-
-This skill uses an **iterative, collaborative approach**. We work together until the Prompt Contract is perfect.
-
-### Phase 1: Setup & Context (First Time Only)
-1. **Check for CLAUDE.md**
-   - If missing: I draft one based on your stack
-   - We iterate on it together until accurate
-   - You approve and I save it
-
-2. **Constraint Handshake**
-   - I read CLAUDE.md
-   - Echo back key constraints
-   - You confirm I understand your project
-
-### Phase 2: Contract Drafting (Iterative)
-3. **Understand the Request**
-   - You describe what you want to build
-   - I ask clarifying questions if needed
-   - We establish scope together
-
-4. **Draft GOAL**
-   - I propose a testable goal with success metrics
-   - You review: too vague? too specific? wrong focus?
-   - We iterate until the goal is crystal clear
-
-5. **Draft CONSTRAINTS**
-   - I list constraints based on CLAUDE.md + this specific task
-   - You add missing constraints
-   - We iterate until boundaries are firm
-
-6. **Draft FORMAT**
-   - I specify exact file structure, patterns, return types
-   - You review: files in right places? patterns match your codebase?
-   - We iterate until format is precise
-
-7. **Draft FAILURE CONDITIONS**
-   - I list what would make output unacceptable
-   - You add critical failure modes I missed
-   - We iterate until guardrails are complete
-
-### Phase 3: Review & Refinement
-8. **Present Complete Contract**
-   - I show you the full 4-component contract
-   - You review as a whole
-   - We iterate on any component that needs adjustment
-
-9. **Confirmation Gate**
-   - I ask: "Does this contract fully specify what you want?"
-   - You say YES → we proceed to execution
-   - You say NO → we return to the component that needs work
-
-### Phase 4: Execution
-10. **Build According to Contract**
-    - I write code following every specification
-    - No surprises, no creative interpretation
-    - Stick to the contract like law
-
-11. **Verify Against Contract**
-    - Test against success criteria from GOAL
-    - Check all FAILURE CONDITIONS are avoided
-    - Confirm FORMAT matches specification
-
-12. **Deliver & Iterate**
-    - Show you the result
-    - If it violates the contract → I fix it
-    - If the contract was wrong → we refine the contract and rebuild
-
-### Phase 5: Learn & Improve
-13. **Contract Post-Mortem (Optional)**
-    - What worked well in the contract?
-    - What should we add to CLAUDE.md for next time?
-    - How can we make future contracts faster?
-
----
-
-## Example Iterative Session
-
-**You:** "I need a dashboard"
-
-**Me:** "Let me draft a GOAL. Here's my understanding:
-
-GOAL: Display user's active projects with real-time updates.
-Success = page loads under 1s, shows projects, allows CRUD operations.
-
-Is this the right direction, or should I adjust?"
-
-**You:** "No, I only need read-only. No create/delete. And I need to filter by status."
-
-**Me:** "Got it. Updated GOAL:
-
-GOAL: Display user's active projects with real-time updates and
-status filtering (active/archived/all). Read-only view.
-Success = page loads under 1s, shows projects list, filter works instantly.
-
-Better?"
-
-**You:** "Perfect."
-
-**Me:** "Great. Now for CONSTRAINTS based on your CLAUDE.md, I see you use Next.js + Convex + Clerk. Any additional constraints for this specific feature?"
-
-**You:** "Yes - no more than 3 Convex queries on this page. Performance matters."
-
-**Me:** "Added. Now let me draft FORMAT..."
-
-*[We continue iterating through each component]*
-
----
-
-## Iteration Rules
-
-### I Will Always:
-- ✅ Show you one component at a time (or ask if you want to see all at once)
-- ✅ Ask "Is this right?" before moving to the next component
-- ✅ Explain my reasoning if something is unclear
-- ✅ Incorporate your feedback immediately
-- ✅ Never start coding until you explicitly approve the full contract
-
-### You Should:
-- ✅ Challenge vague language ("what does 'fast' mean?")
-- ✅ Add constraints I might miss (project-specific patterns)
-- ✅ Tell me when something doesn't match your mental model
-- ✅ Ask for examples if a component is unclear
-
-### Red Flags to Call Out:
-- 🚩 Goal is too vague to test
-- 🚩 Constraints are missing critical boundaries
-- 🚩 Format doesn't match your codebase structure
-- 🚩 Failure conditions don't cover your main concerns
-
----
-
-## Workflow Shortcuts
-
-### For Experienced Users:
-```
-> Draft complete contract for [feature], I'll review all at once
-```
-I'll present all 4 components, you review as a whole.
-
-### For New Users:
-```
-> Build [feature] with Prompt Contracts, guide me step-by-step
-```
-I'll iterate through each component with you.
-
-### For Quick Tasks:
-```
-> Quick contract: [simple, well-defined task]
-```
-I'll draft a minimal contract, you sanity-check it.
-
----
-
-## What "Done" Looks Like
-
-A complete, approved Prompt Contract has:
-
-✅ **GOAL** - You can test it in under 1 minute
-✅ **CONSTRAINTS** - No ambiguity about what's allowed
-✅ **FORMAT** - You know exactly what files/structure to expect
-✅ **FAILURE CONDITIONS** - You've listed your "deal-breakers"
-
-When you approve, I build. No surprises.
-
----
-
-## Iteration Examples
-
-### Iteration on GOAL:
-```
-Draft 1: "Build a settings page"
-→ Too vague. What settings? What can users do?
-
-Draft 2: "Build /settings page where users can update email and password"
-→ Better. Can they see current email? What happens on success?
-
-Draft 3: "Build /settings page displaying current email (read-only) with
-         'Change Email' and 'Change Password' buttons. Success = user clicks
-         button, sees modal, submits new value, sees confirmation, modal closes."
-→ Approved! Testable and specific.
-```
-
-### Iteration on CONSTRAINTS:
-```
-Draft 1: "Use the database"
-→ Which database? Supabase? Convex? PostgreSQL?
-
-Draft 2: "Use Convex for data"
-→ Which Convex pattern? Mutation? Action? Query?
-
-Draft 3: "Use Convex mutation for updates. No direct Supabase calls.
-         All schema changes require showing migration plan first."
-→ Approved! Clear boundaries.
-```
-
----
-
-## How Many Iterations?
-
-**First contract:** 5-10 iterations (we're learning your style)
-**Fifth contract:** 2-3 iterations (I know your patterns)
-**Tenth contract:** 1 iteration or instant approval (we're in sync)
-
-The system gets **faster** as we build shared context in CLAUDE.md.
-
----
-
-## Notes
-
-- Prompts get **shorter** over time, not longer (constraints live in CLAUDE.md)
-- First message of every session: "Read CLAUDE.md and confirm constraints"
-- Use this for MCP tool descriptions too (they're contracts in disguise)
-- The framework scales: works for components, features, full apps
-
----
-
-**Ready to stop vibe coding and start shipping?**
-
-Invoke this skill and let's build your first Prompt Contract.
-
----
-
-## References
-
-- Original article by Phil | Rentier Digital (Feb 2026)
-- Book: "Prompt Contracts: How I Stopped Vibe Coding and Started Shipping Real Software With AI"
-- Methodology inspired by ex-OpenAI engineer's Structured Prompting concept
-
----
-
-*Remember: The quality of output is directly proportional to the specificity of input.*
+## Key Principles
+
+- **One question at a time.** Never dump a form on the user.
+- **Read context before asking.** Check CLAUDE.md, package files, and existing code before asking about the stack.
+- **Testability is the north star.** Every GOAL must have a verifiable success condition.
+- **Failure conditions are the secret weapon.** Push for at least 4 specific failure conditions.
+- **Shorter prompts over time.** Once CLAUDE.md holds constraints, the per-task contract becomes short.
+- **The contract is for the next message.** Output should be ready to paste directly into Claude Code.
