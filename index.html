@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alchemist's Automatons</title>
+  <link rel="stylesheet" href="style.css?v=1776180143906" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- RESET MODAL -->
+    <div id="reset-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#0d1117;border:2px solid #ff4444;padding:24px 32px;font-family:monospace;text-align:center;max-width:360px;">
+        <p style="color:#ff4444;font-size:16px;margin-bottom:8px;">⚠ RESET GAME</p>
+        <p style="color:#aaa;font-size:13px;margin-bottom:20px;">This will erase ALL progress.<br>Are you sure?</p>
+        <button data-action="confirm-reset"
+          style="background:#ff4444;color:#fff;border:none;font-family:monospace;padding:6px 20px;cursor:pointer;margin-right:12px;">
+          Yes, Reset
+        </button>
+        <button data-action="cancel-reset"
+          style="background:transparent;color:#aaa;border:1px solid #aaa;font-family:monospace;padding:6px 20px;cursor:pointer;">
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <!-- HEADER -->
+    <header>
+      <div class="title-ascii">
+        <pre>
+ █████╗ ██╗      ██████╗██╗  ██╗███████╗███╗   ███╗██╗███████╗████████╗
+██╔══██╗██║     ██╔════╝██║  ██║██╔════╝████╗ ████║██║██╔════╝╚══██╔══╝
+███████║██║     ██║     ███████║█████╗  ██╔████╔██║██║███████╗   ██║
+██╔══██║██║     ██║     ██╔══██║██╔══╝  ██║╚██╔╝██║██║╚════██║   ██║
+██║  ██║███████╗╚██████╗██║  ██║███████╗██║ ╚═╝ ██║██║███████║   ██║
+╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝╚══════╝   ╚═╝
+        </pre>
+        <p class="subtitle">~ Automatons &amp; Golems ~</p>
+      </div>
+      <div class="mobile-title-text">⚗ Alchemist's Automatons</div>
+    </header>
+
+    <!-- MAIN LAYOUT: World+Log | Workshop | Zones -->
+    <div id="main-layout">
+
+      <!-- LEFT: WORLD MAP + EVENT LOG -->
+      <div id="panel-world" class="panel">
+        <h2 class="panel-title">[ World ]</h2>
+
+        <nav class="panel-tabs" data-panel="world">
+          <button class="panel-tab panel-tab--active" data-action="switch-panel-tab" data-panel="world" data-tab="map">🗺 Map</button>
+          <button class="panel-tab" data-action="switch-panel-tab" data-panel="world" data-tab="features">⚙ Features</button>
+          <button class="panel-tab" data-action="switch-panel-tab" data-panel="world" data-tab="log">📋 Log</button>
+        </nav>
+
+        <!-- Tab: Map -->
+        <div class="tab-content" data-tab-panel="world" data-tab-id="map">
+          <div id="ascii-map"></div>
+        </div>
+
+        <!-- Tab: Features -->
+        <div class="tab-content tab-hidden" data-tab-panel="world" data-tab-id="features">
+          <div style="padding:8px 0;">
+            <button class="btn" data-action="show-worldmap" style="width:100%;color:var(--green);margin-bottom:6px;">
+              🗺️ World Map
+            </button>
+            <button class="btn" data-action="show-researchlab" style="width:100%;color:var(--purple);margin-bottom:6px;">
+              🧪 Research Lab
+            </button>
+            <button class="btn" id="alembics-btn" data-action="show-alembics" style="width:100%;color:var(--purple);margin-bottom:6px;display:none;">
+              ⚗️ Alembics
+            </button>
+            <button class="btn" id="expedition-btn" data-action="show-expeditions" style="width:100%;color:var(--green);margin-bottom:6px;display:none;">
+              ⚔️ Expeditions
+            </button>
+            <button class="btn" id="manager-btn" data-action="show-manager" style="width:100%;color:var(--amber);display:none;">
+              🧠 Golem Manager
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab: Log -->
+        <div class="tab-content tab-hidden" data-tab-panel="world" data-tab-id="log">
+          <div id="event-log-container">
+            <div id="event-log"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: WORKSHOP -->
+      <div id="panel-workshop" class="panel">
+        <h2 class="panel-title">[ Workshop ]</h2>
+
+        <nav class="panel-tabs" data-panel="workshop">
+          <button class="panel-tab" data-action="switch-panel-tab" data-panel="workshop" data-tab="resources">Resources</button>
+          <button class="panel-tab panel-tab--active" data-action="switch-panel-tab" data-panel="workshop" data-tab="golems">Golems</button>
+          <button class="panel-tab" data-action="switch-panel-tab" data-panel="workshop" data-tab="alchemy">Alchemy</button>
+          <button class="panel-tab" data-action="switch-panel-tab" data-panel="workshop" data-tab="upgrades">Upgrades</button>
+        </nav>
+
+        <!-- Tab: Resources -->
+        <div class="tab-content tab-hidden" data-tab-panel="workshop" data-tab-id="resources">
+          <div class="section">
+            <h3>Resources</h3>
+            <div id="resources-display"></div>
+          </div>
+          <div class="section">
+            <h3>🧙 Gather Manually</h3>
+            <p style="font-size:11px;color:var(--text-dim);margin:0 0 6px;">
+              Gather resources yourself (8s cooldown per zone).
+            </p>
+            <div id="alchemist-actions"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Golems -->
+        <div class="tab-content" data-tab-panel="workshop" data-tab-id="golems">
+          <div class="section">
+            <h3>Golem Roster</h3>
+            <div id="golem-roster"></div>
+          </div>
+          <div class="section">
+            <h3>Craft Golem</h3>
+            <div id="golem-recipes"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Alchemy -->
+        <div class="tab-content tab-hidden" data-tab-panel="workshop" data-tab-id="alchemy">
+          <div class="section">
+            <h3>Alchemy Lab</h3>
+            <div id="alchemy-display"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Upgrades -->
+        <div class="tab-content tab-hidden" data-tab-panel="workshop" data-tab-id="upgrades">
+          <div class="section">
+            <h3>Upgrades</h3>
+            <div id="upgrades-display"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: ZONES -->
+      <div id="panel-zones" class="panel">
+        <h2 class="panel-title">[ Zones ]</h2>
+        <div id="zones-panel"></div>
+      </div>
+
+    </div>
+
+    <!-- WORLD MAP PANEL (hidden by default) -->
+    <div id="worldmap-panel" style="display:none;"></div>
+
+    <!-- RESEARCH LAB PANEL (hidden by default) -->
+    <div id="researchlab-panel" style="display:none;"></div>
+
+    <!-- ALEMBIC PANEL (hidden by default) -->
+    <div id="alembic-panel" style="display:none;"></div>
+
+    <!-- EXPEDITION PANEL (hidden by default) -->
+    <div id="expedition-panel" style="display:none;"></div>
+
+    <!-- MANAGER PANEL (hidden by default) -->
+    <div id="manager-panel" style="display:none;"></div>
+
+    <!-- DEBUG PANEL (hidden by default, toggle with F2) -->
+    <div id="debug-panel" style="display:none;position:fixed;top:60px;right:10px;z-index:10000;"></div>
+
+    <!-- MOBILE TAB BAR -->
+    <nav id="mobile-tab-bar">
+      <button class="mobile-tab" data-panel="panel-world" data-action="mobile-tab">
+        <span class="mobile-tab-icon">🌍</span>
+        <span class="mobile-tab-label">World</span>
+      </button>
+      <button class="mobile-tab mobile-tab-active" data-panel="panel-workshop" data-action="mobile-tab">
+        <span class="mobile-tab-icon">🔨</span>
+        <span class="mobile-tab-label">Workshop</span>
+      </button>
+      <button class="mobile-tab" data-panel="panel-zones" data-action="mobile-tab">
+        <span class="mobile-tab-icon">🗺️</span>
+        <span class="mobile-tab-label">Zones</span>
+      </button>
+    </nav>
+
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay"></div>
+
+    <!-- FOOTER -->
+    <footer id="footer-bar">
+      <span id="footer-time"></span>
+      <span id="footer-prestige"></span>
+      <button data-action="start-tutorial"
+        style="font-size:10px;padding:2px 10px;background:transparent;border:1px solid var(--green);color:var(--green);font-family:monospace;cursor:pointer;margin-left:12px;"
+        >? Tutorial</button>
+      <button data-action="reset-game"
+        style="font-size:10px;padding:2px 10px;background:transparent;border:1px solid #ff4444;color:#ff4444;font-family:monospace;cursor:pointer;margin-left:8px;"
+        >⚠ Reset</button>
+    </footer>
+  </div>
+
+  <script src="game.js?v=1776180143906"></script>
+</body>
+</html>
