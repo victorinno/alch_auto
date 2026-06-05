@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Alchemist's Automatons</title>
-  <link rel="stylesheet" href="style.css?v=1776180143906" />
+  <link rel="stylesheet" href="style.css?v=1780666831882" />
 </head>
 <body>
   <div id="app">
@@ -98,6 +98,7 @@
           <button class="panel-tab panel-tab--active" data-action="switch-panel-tab" data-panel="workshop" data-tab="golems">Golems</button>
           <button class="panel-tab" data-action="switch-panel-tab" data-panel="workshop" data-tab="alchemy">Alchemy</button>
           <button class="panel-tab" data-action="switch-panel-tab" data-panel="workshop" data-tab="upgrades">Upgrades</button>
+          <button class="panel-tab" data-action="switch-panel-tab" data-panel="workshop" data-tab="atelier">Atelier</button>
         </nav>
 
         <!-- Tab: Resources -->
@@ -132,6 +133,25 @@
           <div class="section">
             <h3>Alchemy Lab</h3>
             <div id="alchemy-display"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Atelier -->
+        <div class="tab-content tab-hidden" data-tab-panel="workshop" data-tab-id="atelier">
+          <div class="section">
+            <h3>Atelier Grid</h3>
+            <p style="font-size:11px;color:var(--text-dim);margin:0 0 6px;">
+              Build and expand your workshop floor. Clear tiles with Constructor Golems. Unlock via research.
+            </p>
+            <div id="atelier-grid"></div>
+          </div>
+          <div class="section">
+            <h3>Transport Golems</h3>
+            <div id="transport-golem-roster"></div>
+          </div>
+          <div class="section">
+            <h3>Craft Transport Golem</h3>
+            <div id="transport-golem-recipes"></div>
           </div>
         </div>
 
@@ -202,6 +222,6 @@
     </footer>
   </div>
 
-  <script src="game.js?v=1776180143906"></script>
+  <script src="game.js?v=1780666831882"></script>
 </body>
 </html>

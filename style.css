@@ -236,6 +236,10 @@ header {
   margin-bottom: 10px;
   background: var(--bg3);
 }
+.zone-card.zone-depleted {
+  opacity: 0.55;
+  border-color: var(--text-dim);
+}
 
 .zone-header {
   display: flex;
@@ -643,7 +647,35 @@ header {
 
 .researchlab-header {
   max-width: 1200px;
-  margin: 0 auto 20px;
+  margin: 0 auto 12px;
+}
+
+/* CK inventory strip at the top of the lab */
+.rl-ck-strip {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg2);
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.rl-ck-strip .ck-value {
+  font-size: 13px;
+  font-weight: bold;
+}
+.rl-ck-strip .ck-rate {
+  padding: 2px 8px;
+  border: 1px solid var(--green-dim);
+  border-radius: 2px;
+  color: var(--green);
+  font-size: 12px;
+  letter-spacing: 1px;
 }
 
 .researchlab-content {
@@ -651,15 +683,87 @@ header {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
-/* Machines Section */
+/* ── Labs section (Factorio factory floor) ── */
 .machines-section {
   background: var(--bg2);
   border: 1px solid var(--border);
   padding: 16px;
   border-radius: 4px;
+}
+
+.lab-throughput-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 14px;
+  font-size: 11px;
+}
+.lab-throughput-bar .tbar-rate {
+  font-size: 18px;
+  color: var(--green);
+  text-shadow: 0 0 6px var(--green-dim);
+  letter-spacing: 1px;
+}
+.lab-throughput-bar .tbar-label {
+  color: var(--text-dim);
+}
+.lab-throughput-bar .tbar-slots {
+  margin-left: auto;
+  color: var(--amber);
+  font-size: 11px;
+}
+
+.labs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.machine-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: 4px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.machine-card.lab-active {
+  border-color: var(--green);
+  box-shadow: 0 0 10px rgba(57,255,20,0.15);
+}
+.machine-card.lab-idle {
+  border-color: var(--border);
+  opacity: 0.7;
+}
+
+.machine-card h4 {
+  color: var(--amber);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.lab-card-rate {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.lab-card-state {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+.lab-card-state.consuming {
+  color: var(--green);
+  animation: pulse 1.5s infinite;
+}
+.lab-card-state.idle {
+  color: var(--text-dim);
 }
 
 .machines-grid {
@@ -668,25 +772,12 @@ header {
   gap: 16px;
 }
 
-.machine-card {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  padding: 12px;
-  border-radius: 4px;
-}
-
-.machine-card h4 {
-  color: var(--amber);
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-
 .machine-card .btn-sm {
   font-size: 11px;
   padding: 4px 8px;
 }
 
-/* Research Section */
+/* ── Research section ── */
 .research-section {
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -694,13 +785,87 @@ header {
   border-radius: 4px;
 }
 
+/* Active research card — prominent */
 .active-research-card {
   background: var(--bg3);
   border: 2px solid var(--green);
-  padding: 12px;
+  box-shadow: 0 0 16px rgba(57,255,20,0.1);
+  padding: 14px;
   margin-bottom: 16px;
   border-radius: 4px;
 }
+.arc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.arc-icon {
+  font-size: 22px;
+}
+.arc-name {
+  font-size: 14px;
+  color: var(--green);
+  font-weight: bold;
+}
+.arc-level {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+.arc-desc {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.arc-divination-badge {
+  display: inline-block;
+  font-size: 9px;
+  padding: 2px 6px;
+  background: rgba(204,68,255,0.15);
+  border: 1px solid rgba(204,68,255,0.4);
+  border-radius: 2px;
+  color: #cc44ff;
+  margin-bottom: 8px;
+}
+.arc-progress-wrap {
+  position: relative;
+  margin-bottom: 6px;
+}
+.arc-progress-bar {
+  height: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.arc-progress-fill {
+  height: 100%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  transition: width 0.5s linear;
+}
+.arc-progress-fill.paused {
+  background: var(--amber);
+  box-shadow: 0 0 4px var(--amber);
+}
+.arc-progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.arc-status {
+  font-size: 11px;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.arc-status.running { color: var(--green); }
+.arc-status.paused  { color: var(--amber); }
 
 .research-queue-card {
   background: var(--bg3);
@@ -708,12 +873,26 @@ header {
   padding: 12px;
   margin-bottom: 16px;
   border-radius: 4px;
-  max-height: 300px;
+  max-height: 220px;
   overflow-y: auto;
 }
 
 .research-queue-card h4 {
   margin-bottom: 8px;
+}
+.queue-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.queue-row:last-child { border-bottom: none; }
+.queue-cost {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-right: 8px;
 }
 
 .btn-xs {
@@ -732,7 +911,7 @@ header {
   color: var(--bg);
 }
 
-/* Research Grid */
+/* Research Tree Grid */
 .research-grid {
   display: flex;
   flex-direction: column;
@@ -741,9 +920,9 @@ header {
 
 .research-tier {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .research-node-card {
@@ -751,29 +930,83 @@ header {
   border: 1px solid var(--border);
   padding: 12px;
   border-radius: 4px;
-  text-align: center;
-  transition: all 0.3s;
+  transition: border-color 0.2s, box-shadow 0.2s;
   display: flex;
   flex-direction: column;
-  min-height: 220px;
+  gap: 4px;
+  min-height: 200px;
 }
-
-.research-node-card:hover {
+.research-node-card:hover:not(.completed):not(.locked-node) {
   border-color: var(--green);
-  box-shadow: 0 0 8px rgba(57, 255, 20, 0.2);
+  box-shadow: 0 0 8px rgba(57, 255, 20, 0.15);
 }
-
 .research-node-card.completed {
-  background: var(--bg);
   border-color: var(--green-dim);
-  opacity: 0.7;
+  opacity: 0.65;
+}
+.research-node-card.locked-node {
+  opacity: 0.5;
 }
 
-.research-node-card h5 {
-  color: var(--purple);
-  font-size: 13px;
+/* Node header row */
+.rn-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin-bottom: 4px;
 }
+.rn-icon { font-size: 20px; flex-shrink: 0; }
+.rn-title-block { flex: 1; }
+.research-node-card h5 {
+  color: var(--purple);
+  font-size: 12px;
+  margin: 0 0 2px;
+  line-height: 1.2;
+}
+/* Knowledge-type pill */
+.ck-type-pill {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+  font-weight: bold;
+}
+.ck-type-pill.alchemy {
+  background: rgba(68,136,255,0.15);
+  border: 1px solid rgba(68,136,255,0.4);
+  color: #88aaff;
+}
+.ck-type-pill.divination {
+  background: rgba(204,68,255,0.15);
+  border: 1px solid rgba(204,68,255,0.4);
+  color: #cc88ff;
+}
+.rn-desc {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.35;
+  flex: 1;
+}
+.rn-level {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.rn-cost {
+  font-size: 11px;
+  color: var(--text);
+}
+.rn-cost .ck-alchemy { color: #88aaff; }
+.rn-cost .ck-div     { color: #cc88ff; }
+.rn-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.rn-status { font-size: 10px; }
 
 /* ── ALEMBIC PANEL ───────────────────────────────────── */
 #alembic-panel {
@@ -1368,4 +1601,409 @@ header {
     max-height: 50vh;
     overflow-y: auto;
   }
+}
+
+
+/* ─────────────────────────────────────────────────────
+   ATELIER — FACTORY BLUEPRINT SYSTEM
+   ───────────────────────────────────────────────────── */
+
+/* Wrapper: blueprint graph-paper background */
+.atelier-blueprint {
+  background-color: #090c09;
+  background-image:
+    radial-gradient(circle, #1e2e1e 1px, transparent 1px);
+  background-size: 16px 16px;
+  border: 1px solid var(--green-dim);
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+/* Corner ornaments via pseudo */
+.atelier-blueprint::before {
+  content: '┌ ATELIER FLOOR ─────────────────────────────';
+  position: absolute;
+  top: -1px;
+  left: 8px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: var(--green-dim);
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+
+/* Grid: 3 equal columns, small gap */
+.atelier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+/* ── Base tile ── */
+.tile {
+  position: relative;
+  min-height: 72px;
+  padding: 6px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  border: 1px solid #1e2e1e;
+  transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+  overflow: hidden;
+}
+
+/* Coordinate label — top-left corner */
+.tile-coord {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-size: 8px;
+  color: #2a4a2a;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  line-height: 1;
+}
+
+/* ── BLOCKED tile: diagonal CSS hatching ── */
+.tile--blocked {
+  background-color: #0a0e0a;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(30, 46, 30, 0.6) 4px,
+    rgba(30, 46, 30, 0.6) 5px
+  );
+  border-color: #151f15;
+  color: #2a4a2a;
+  cursor: default;
+}
+
+.tile--blocked .tile-coord { color: #1a2a1a; }
+
+/* ── CLEARED tile: warm amber floor ── */
+.tile--cleared {
+  background: #0e1208;
+  border-color: var(--amber-dim);
+  color: var(--text);
+  box-shadow: inset 0 0 12px rgba(255, 179, 0, 0.06);
+}
+
+.tile--cleared .tile-coord { color: var(--amber-dim); }
+
+.tile--cleared:hover {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 16px rgba(255, 179, 0, 0.12), 0 0 4px rgba(255, 179, 0, 0.2);
+}
+
+/* ── ROAD tile: green circuit-trace accent ── */
+.tile--road {
+  border-color: var(--green-dim);
+  box-shadow: inset 0 0 10px rgba(57, 255, 20, 0.05);
+}
+
+.tile--road::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  width: 80%;
+  height: 2px;
+  background: var(--green-dim);
+  border-radius: 1px;
+}
+
+.tile--road .tile-coord { color: var(--green-dim); }
+
+/* ── OCCUPIED tile (has a building) ── */
+.tile--occupied {
+  border-color: var(--amber);
+  background: #0f1409;
+  box-shadow: inset 0 0 18px rgba(255, 179, 0, 0.1);
+}
+
+/* ── Building badge: left-bar ledger style ── */
+.building-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+}
+
+.building-badge-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.building-badge-name {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  text-align: center;
+  line-height: 1.2;
+  padding: 0 2px;
+  border-left: 2px solid var(--amber-dim);
+  padding-left: 3px;
+  width: 100%;
+}
+
+/* ── Blocked tile icon ── */
+.tile-blocked-icon {
+  font-size: 16px;
+  opacity: 0.35;
+  margin-bottom: 2px;
+}
+
+/* ── Action buttons inside tiles ── */
+.tile-actions {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-tile {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--amber-dim);
+  color: var(--amber);
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.btn-tile:hover {
+  background: rgba(255, 179, 0, 0.12);
+  border-color: var(--amber);
+}
+
+.btn-tile--dispatch {
+  border-color: var(--green-dim);
+  color: var(--green);
+}
+
+.btn-tile--dispatch:hover {
+  background: rgba(57, 255, 20, 0.1);
+  border-color: var(--green);
+}
+
+/* ── Locked/pending state ── */
+.atelier-locked {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.atelier-locked-glyph {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 8px;
+  opacity: 0.3;
+}
+
+/* ── Build menu overlay inside tile ── */
+.build-menu {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #0a0f0a;
+  border: 1px solid var(--amber-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  z-index: 10;
+  overflow-y: auto;
+}
+
+.build-menu-item {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 1px solid #1e2e1e;
+  color: var(--text);
+  padding: 3px 5px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.build-menu-item:hover {
+  background: rgba(255,179,0,0.08);
+  border-color: var(--amber-dim);
+  color: var(--amber);
+}
+
+.build-menu-close {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  background: transparent;
+  border: 1px solid #2a1a1a;
+  color: var(--red);
+  padding: 2px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  margin-top: auto;
+}
+
+/* ─────────────────────────────────────────────────────
+   TRANSPORT GOLEMS
+   ───────────────────────────────────────────────────── */
+
+.transport-section-header {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--green-dim);
+  border-bottom: 1px solid #1e2e1e;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.transport-golem-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #1e2e1e;
+  border-left: 3px solid var(--green-dim);
+  padding: 7px 10px;
+  margin-bottom: 5px;
+  background: #0a0e0a;
+  transition: border-color 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.transport-golem-card:hover {
+  border-color: var(--amber-dim);
+  border-left-color: var(--amber);
+}
+
+.transport-golem-card--traveling { border-left-color: var(--amber); }
+.transport-golem-card--idle      { border-left-color: var(--green-dim); }
+
+.tgc-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tgc-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tgc-name {
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.tgc-stats {
+  display: flex;
+  gap: 6px;
+}
+
+.tgc-stat {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.tgc-stat span {
+  color: var(--amber);
+}
+
+.tgc-status {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tgc-status--idle     { color: var(--green); }
+.tgc-status--traveling { color: var(--amber); }
+.tgc-status--unloading { color: var(--blue); }
+
+/* Transport recipe cards */
+.transport-recipe-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #1e2e1e;
+  padding: 8px 10px;
+  margin-bottom: 5px;
+  background: #090c09;
+  gap: 8px;
+}
+
+.trc-identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trc-icon { font-size: 18px; }
+
+.trc-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trc-name {
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+.trc-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.trc-stat {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.trc-stat span { color: var(--green); }
+
+.trc-cost {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-align: right;
+  letter-spacing: 0.03em;
+}
+
+.transport-recipe-card--locked {
+  opacity: 0.45;
+}
+
+/* ── Legacy btn-xs kept for any remnants ── */
+.btn-xs {
+  font-size: 10px;
+  padding: 1px 5px;
+  line-height: 1.4;
 }
