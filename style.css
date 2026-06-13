@@ -785,13 +785,13 @@ header {
   border-radius: 4px;
 }
 
-/* Active research card — prominent */
+/* Active research card — compact alchemy-queue style */
 .active-research-card {
-  background: var(--bg3);
-  border: 2px solid var(--green);
-  box-shadow: 0 0 16px rgba(57,255,20,0.1);
-  padding: 14px;
-  margin-bottom: 16px;
+  background: var(--bg2);
+  border: 1px solid var(--green);
+  box-shadow: 0 0 8px rgba(57,255,20,0.08);
+  padding: 8px 12px;
+  margin-bottom: 10px;
   border-radius: 4px;
 }
 .arc-header {
@@ -942,10 +942,28 @@ header {
 }
 .research-node-card.completed {
   border-color: var(--green-dim);
-  opacity: 0.65;
+  opacity: 0.4;
+  min-height: unset;
+  padding: 8px 10px;
+}
+.research-node-card.completed .rn-desc,
+.research-node-card.completed .rn-cost,
+.research-node-card.completed .rn-level,
+.research-node-card.completed .ck-type-pill {
+  display: none;
+}
+.research-node-card.completed h5 {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 .research-node-card.locked-node {
-  opacity: 0.5;
+  opacity: 0.28;
+  pointer-events: none;
+}
+.research-node-card.locked-node .rn-desc,
+.research-node-card.locked-node .rn-cost,
+.research-node-card.locked-node .rn-level {
+  display: none;
 }
 
 /* Node header row */
@@ -1007,6 +1025,125 @@ header {
   border-top: 1px solid var(--border);
 }
 .rn-status { font-size: 10px; }
+
+/* ── RESEARCH LAB UNIFIED DASHBOARD ─────────────────── */
+.rl-wrapper { max-width: 1200px; margin: 0 auto; }
+
+.rl-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.rl-hud-title {
+  color: var(--purple);
+  letter-spacing: 2px;
+  font-size: 16px;
+  font-weight: bold;
+}
+.rl-hud-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.rl-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-size: 11px;
+  background: var(--bg2);
+  color: var(--text);
+  white-space: nowrap;
+}
+.rl-chip--active { border-color: var(--green); color: var(--green); animation: pulse 1.5s infinite; }
+.rl-chip--idle   { color: var(--text-dim); }
+.rl-chip--div    { border-color: rgba(204,68,255,0.4); color: #cc88ff; }
+
+/* Compact active research card row */
+.arc-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.arc-icon-sm { font-size: 15px; flex-shrink: 0; }
+.arc-name-sm { color: var(--green); font-size: 12px; font-weight: bold; flex: 1; }
+.arc-spin-sm { width: 14px; text-align: center; color: var(--green); }
+.arc-timer-sm { font-size: 11px; color: var(--text-dim); }
+.arc-paused-badge { font-size: 10px; color: var(--amber); white-space: nowrap; }
+
+/* Queue strip */
+.rl-queue-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--bg2);
+  border: 1px solid var(--amber);
+  border-radius: 4px;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.rl-queue-label { color: var(--text-dim); font-size: 10px; white-space: nowrap; }
+.rl-queue-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-size: 10px;
+  color: var(--amber);
+}
+
+/* Research tree section */
+.rl-tree-section { margin-bottom: 16px; }
+.rl-tier-block { margin-bottom: 14px; }
+.rl-section-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.rl-section-label--t1 { color: var(--green); border-color: rgba(57,255,20,0.3); }
+.rl-section-label--t2 { color: var(--purple); border-color: rgba(204,68,255,0.3); }
+
+/* Infrastructure section */
+.rl-infra { margin-bottom: 20px; }
+.rl-infra-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.rl-lab-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 11px;
+  background: var(--bg3);
+  color: var(--text-dim);
+}
+.rl-lab-chip.active { border-color: var(--green); color: var(--green); }
+.lab-chip-rate { font-size: 10px; color: var(--text-dim); margin-left: 4px; }
+.rl-infra-hint { font-size: 10px; color: var(--text-dim); }
+.rl-distiller {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
 
 /* ── ALEMBIC PANEL ───────────────────────────────────── */
 #alembic-panel {
